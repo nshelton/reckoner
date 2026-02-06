@@ -184,6 +184,25 @@ void MainScreen::onGui()
         }
 
         ImGui::Separator();
+        ImGui::Text("Backend Configuration:");
+
+        // Backend type selector
+        const char* backend_types[] = { "Fake Data", "HTTP Backend" };
+        int current_type = static_cast<int>(m_backendType);
+        if (ImGui::Combo("Backend Type", &current_type, backend_types, 2)) {
+            switchBackend(static_cast<BackendType>(current_type));
+        }
+
+        // HTTP backend configuration
+        if (m_backendType == BackendType::Http) {
+            ImGui::InputText("Backend URL", m_backendUrl, sizeof(m_backendUrl));
+            ImGui::InputText("Entity Type", m_entityType, sizeof(m_entityType));
+            if (ImGui::Button("Apply HTTP Config")) {
+                switchBackend(BackendType::Http);
+            }
+        }
+
+        ImGui::Separator();
         ImGui::Text("Backend Stats:");
         ImGui::Text("Entities: %zu", m_model.entities.size());
         ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
@@ -299,4 +318,20 @@ void MainScreen::fetchData()
             }
         );
     });
+}
+
+void MainScreen::switchBackend(BackendType type)
+{
+    m_backendType = type;
+
+    if (type == BackendType::Fake) {
+        std::cout << "Switching to FakeBackend" << std::endl;
+        m_backend = std::make_unique<FakeBackend>(1000);
+    } else {
+        std::cout << "Switching to HttpBackend: " << m_backendUrl << std::endl;
+        m_backend = std::make_unique<HttpBackend>(m_backendUrl, m_entityType);
+    }
+
+    // Trigger immediate fetch with new backend
+    fetchData();
 }

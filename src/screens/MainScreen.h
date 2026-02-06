@@ -7,8 +7,10 @@
 #include "AppModel.h"
 #include "Backend.h"
 #include "FakeBackend.h"
+#include "HttpBackend.h"
 #include <memory>
 #include <future>
+#include <string>
 
 class MainScreen : public IScreen
 {
@@ -36,6 +38,12 @@ private:
     std::unique_ptr<Backend> m_backend;
     std::future<void> m_pendingFetch;
 
+    // Backend configuration
+    enum class BackendType { Fake, Http };
+    BackendType m_backendType = BackendType::Fake;
+    char m_backendUrl[256] = "http://localhost:8000";
+    char m_entityType[128] = "location.gps";
+
     // Cached window sizes
     ImVec2 m_lastMapSize{0, 0};
     ImVec2 m_lastTimelineSize{0, 0};
@@ -54,4 +62,5 @@ private:
     // Methods
     void refreshDataIfExtentChanged();
     void fetchData();
+    void switchBackend(BackendType type);
 };
