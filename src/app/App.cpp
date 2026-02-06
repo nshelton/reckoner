@@ -1,4 +1,4 @@
-﻿#include "App.h"
+#include "App.h"
 #include "Screen.h"
 
 #include <iostream>
@@ -6,10 +6,6 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-
-#include <glog/logging.h>
-
-#include "core/Core.h"
 
 App::App(int width, int height, const char *title)
     : m_width(width), m_height(height)
@@ -49,14 +45,6 @@ App::App(int width, int height, const char *title)
     glfwSetCharCallback(m_window, charCallback);
     glfwSetDropCallback(m_window, dropCallback);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        glfwDestroyWindow(m_window);
-        glfwTerminate();
-        throw std::runtime_error("GLAD init failed");
-    }
-
     glfwSwapInterval(1);
     glViewport(0, 0, width, height);
     glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
@@ -64,6 +52,9 @@ App::App(int width, int height, const char *title)
     // ImGui setup
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;  // Enable Docking
+
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(m_window, false);
     ImGui_ImplOpenGL3_Init("#version 330 core");
@@ -100,6 +91,25 @@ void App::run(IScreen &screen)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Create fullscreen dockspace
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
+
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
+        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
+        window_flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::Begin("DockSpace", nullptr, window_flags);
+        ImGui::PopStyleVar();
+
+        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::End();
+
         screen.onUpdate(dt);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -116,7 +126,7 @@ void App::run(IScreen &screen)
         ImGuiIO &io = ImGui::GetIO();
         if (!io.WantCaptureKeyboard && ImGui::IsKeyPressed(ImGuiKey_Escape))
         {
-            glfwSetWindowShouldClose(m_window, GLFW_TRUE); // or your platform’s close call
+            glfwSetWindowShouldClose(m_window, GLFW_TRUE);
         }
     }
 
@@ -126,7 +136,7 @@ void App::run(IScreen &screen)
 
 void App::framebufferSizeCallback(GLFWwindow *window, int width, int height)
 {
-    LOG(INFO) << "Framebuffer resized to " << width << "x" << height;
+    // std::cout << "Framebuffer resized to " << width << "x" << height << std::endl;
     auto *app = reinterpret_cast<App *>(glfwGetWindowUserPointer(window));
     if (!app)
         return;

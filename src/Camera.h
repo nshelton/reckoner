@@ -1,8 +1,9 @@
-﻿﻿#pragma once
+#pragma once
 
 #define GL_SILENCE_DEPRECATION
 #include <GLFW/glfw3.h>
-#include <core/core.h>
+#include "core/Vec2.h"
+#include "core/Mat3.h"
 #include <cmath>
 
 class Camera
@@ -66,7 +67,6 @@ private:
     int m_width{0};
     int m_height{0};
 
-    bool m_dragging{false};
     Vec2 m_last;
 
     // page (mm) to ndc transform

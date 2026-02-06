@@ -1,7 +1,10 @@
-﻿#pragma once
+#pragma once
+
+#include <vector>
+#include <string>
+#include "core/Vec2.h"
 
 class App;
-#include "core/core.h"
 
 class IScreen {
 public:

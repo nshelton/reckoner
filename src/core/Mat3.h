@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstring>
 #include "core/Vec2.h"
 
 struct Mat3

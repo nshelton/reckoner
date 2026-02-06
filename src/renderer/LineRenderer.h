@@ -1,8 +1,14 @@
-﻿#pragma once
+#pragma once
 
-#include <glad/glad.h>
 #include <vector>
-#include "core/core.h"
+
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <GL/glext.h>
+
+#include "core/Vec2.h"
+#include "core/Mat3.h"
+#include "core/Color.h"
 
 class LineRenderer {
 public:

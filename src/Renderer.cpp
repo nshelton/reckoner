@@ -2,96 +2,39 @@
 
 #include <algorithm>
 #include <cmath>
-#include "filters/Types.h"
 #include "core/Theme.h"
 
 Renderer::Renderer()
 {
    m_lines.init();
-   m_images.init();
-   m_floatImages.init();
 }
 
-void Renderer::render(const Camera &camera, const PageModel &page, const InteractionState &uiState)
+void Renderer::render(const Camera &camera, const AppModel &model, const InteractionState &uiState)
 {
    m_lines.clear();
-   m_images.clear();
-   m_floatImages.clear();
-   // draw page extent and grid
-   renderPage(camera, page);
-
-   // draw selected
-   if (uiState.activeId)
-   {
-      if (page.entities.find(*uiState.activeId) != page.entities.end())
-      {
-         const Entity &entity = page.entities.at(*uiState.activeId);
-         BoundingBox bb = entity.boundsLocal();
-         // Outline color reflects current output kind (vector vs raster)
-         const LayerPtr &selLayer = const_cast<Entity &>(entity).filterChain.output();
-         Color selCol = isPathSetLayer(selLayer) ? theme::PathsetColor : theme::BitmapColor;
-         drawRect(
-             entity.localToPage * bb.min - 1,
-             entity.localToPage * bb.max + 1,
-             selCol);
-
-         // draw resize handles (corners + edges)
-         Vec2 minL = bb.min;
-         Vec2 maxL = bb.max;
-         Vec2 mid = Vec2((minL.x + maxL.x) * 0.5f, (minL.y + maxL.y) * 0.5f);
-         Vec2 handles[8] = {
-             Vec2(mid.x, maxL.y),  // N
-             Vec2(mid.x, minL.y),  // S
-             Vec2(maxL.x, mid.y),  // E
-             Vec2(minL.x, mid.y),  // W
-             Vec2(maxL.x, maxL.y), // NE
-             Vec2(minL.x, maxL.y), // NW
-             Vec2(maxL.x, minL.y), // SE
-             Vec2(minL.x, minL.y)  // SW
-         };
-
-         Color hc = Color(1.0f, 0.6f, 0.1f, 1.0f);
-         for (Vec2 pLocal : handles)
-         {
-            Vec2 p = entity.localToPage.apply(pLocal);
-            drawHandle(p, HANDLE_RENDER_RADIUS_MM, hc);
-         }
-      }
-   }
-
-   // Draw images first, then overlays/lines on top
-   m_images.draw(camera.Transform());
-   m_floatImages.draw(camera.Transform());
+   renderPage(camera, model);
    m_lines.draw(camera.Transform());
 }
 
 void Renderer::shutdown()
 {
    m_lines.shutdown();
-   m_images.shutdown();
-   m_floatImages.shutdown();
 }
 
-void Renderer::renderPage(const Camera &camera, const PageModel &page)
+void Renderer::renderPage(const Camera &camera, const AppModel &model)
 {
-   Color outlineCol = Color(0.8f, 0.8f, 0.8f, 1.0f);
-   // outline
-
-   drawRect(Vec2(0.0f, 0.0f), Vec2(page.page_width_mm, page.page_height_mm), outlineCol);
-
-   // also show letter paper
-   drawRect(Vec2(0.0f, 0.0f), Vec2(215.9f, 279.4f), outlineCol);
-   drawRect(Vec2(0.0f, 0.0f), Vec2(279.4f, 215.9f), outlineCol);
-
-   // grid lines every 10mm
+   // Simple grid in world coordinates (0-100 range for now)
+   // This will be replaced with proper lat/lon rendering later
    Color gridCol = Color(0.3f, 0.3f, 0.3f, 1.0f);
-   for (float x = 10.0f; x < page.page_width_mm; x += 10.0f)
+
+   // Draw a 100x100 grid with lines every 10 units
+   for (float x = 0.0f; x <= 100.0f; x += 10.0f)
    {
-      m_lines.addLine(Vec2(x, 0.0f), Vec2(x, page.page_height_mm), gridCol);
+      m_lines.addLine(Vec2(x, 0.0f), Vec2(x, 100.0f), gridCol);
    }
-   for (float y = 10.0f; y < page.page_height_mm; y += 10.0f)
+   for (float y = 0.0f; y <= 100.0f; y += 10.0f)
    {
-      m_lines.addLine(Vec2(0.0f, y), Vec2(page.page_width_mm, y), gridCol);
+      m_lines.addLine(Vec2(0.0f, y), Vec2(100.0f, y), gridCol);
    }
 }
 

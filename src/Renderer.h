@@ -1,14 +1,16 @@
 #pragma once
 
-#include "core/Core.h"
-#include "render/LineRenderer.h"
-#include "render/BitmapRenderer.h"
-#include "render/FloatImageRenderer.h"
+#include "core/Vec2.h"
+#include "core/Mat3.h"
+#include "core/Color.h"
+#include "renderer/LineRenderer.h"
 #include "Interaction.h"
-#include "Page.h"
+#include "AppModel.h"
 #include "Camera.h"
 
 #include <iostream>
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
 
 
 #define HANDLE_RENDER_RADIUS_MM 3.0f
@@ -23,7 +25,7 @@ public:
         glViewport(0, 0, width, height);
     }
 
-    void render(const Camera &camera, const PageModel &page, const InteractionState &uiState);
+    void render(const Camera &camera, const AppModel &model, const InteractionState &uiState);
 
     void setLineWidth(float w) { m_lines.setLineWidth(w); }
     void setNodeDiameterPx(float d) { m_nodeDiameterPx = d; m_lines.setPointDiameterPx(d); }
@@ -39,11 +41,9 @@ public:
 
 private:
     LineRenderer m_lines{};
-    BitmapRenderer m_images{};
-    FloatImageRenderer m_floatImages{};
     float m_nodeDiameterPx{8.0f};
 
-    void renderPage(const Camera &camera, const PageModel &page);
+    void renderPage(const Camera &camera, const AppModel &model);
     void drawRect(const Vec2 &min, const Vec2 &max, const Color &col);
     void drawHandle(const Vec2 &center, float sizeMm, const Color &col);
     void drawCircle(const Vec2 &center, float radiusMm, const Color &col);

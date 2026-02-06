@@ -44,10 +44,8 @@ void Camera::reset() {
     m_top = m_zoom + center.y;
 
     m_viewTransform = Mat3();
-    m_dragging = false;
 
     m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
-    m_dragging = false;
 }
 
 void Camera::zoomAtPixel(const Vec2 &px, float wheelSteps)

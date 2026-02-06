@@ -1,41 +1,44 @@
 ﻿cmake_minimum_required(VERSION 3.21)
-project(Minotaur LANGUAGES CXX)
-
+project(reckoner LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(glfw3 CONFIG REQUIRED)
-find_package(glad CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-find_package(glog CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
-find_package(GTest CONFIG REQUIRED)
+# Find dependencies
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED)
 
+# Build ImGui from source
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+add_library(imgui STATIC
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC
+  ${IMGUI_DIR}
+  ${IMGUI_DIR}/backends
+)
+target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
+
+# Collect all source files
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
   src/*.cpp
 )
 
-# Add Windows icon resource
-if(WIN32)
-  set(RESOURCE_FILES resources/app.rc)
-endif()
+# Create executable
+add_executable(reckoner ${SRC_FILES})
 
-add_executable(minotaur ${SRC_FILES} ${RESOURCE_FILES})
+# Include directories
+target_include_directories(reckoner PRIVATE src)
 
-target_include_directories(minotaur PRIVATE src)
-
-target_link_libraries(minotaur PRIVATE glad::glad glfw imgui::imgui opengl32 glog::glog fmt::fmt nlohmann_json::nlohmann_json)
-target_link_libraries(minotaur PRIVATE ole32 windowscodecs)
-
-enable_testing()
-
-add_executable(minotaur_tests
-  tests/test_kdtree.cpp
+# Link libraries
+target_link_libraries(reckoner PRIVATE
+  glfw
+  OpenGL::GL
+  imgui
 )
-
-target_include_directories(minotaur_tests PRIVATE src)
-target_link_libraries(minotaur_tests PRIVATE GTest::gtest GTest::gtest_main)
-
-add_test(NAME minotaur_kdtree COMMAND minotaur_tests)

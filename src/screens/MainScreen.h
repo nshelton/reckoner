@@ -1,14 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "app/Screen.h"
 #include <imgui.h>
 #include "Camera.h"
 #include "Renderer.h"
-#include <memory>
-#include "serial/SerialController.h"
-#include "plotters/AxidrawController.h"
-#include "plotters/PlotSpooler.h"
-#include "plotters/PlotterConfig.h"
+#include "AppModel.h"
 
 class MainScreen : public IScreen
 {
@@ -29,16 +25,9 @@ private:
     Camera m_camera{};
     Renderer m_renderer{};
     InteractionController m_interaction{};
-    PageModel m_page{};
+    AppModel m_model{};
 
-    // Plotter/Serial
-    SerialController m_serial{};
-    AxiDrawState m_axState{};
-    std::unique_ptr<AxiDrawController> m_ax{};
-    std::unique_ptr<PlotSpooler> m_spooler{};
-    PlotterConfig m_plotter{};
-    char m_portBuf[64] = "";
-
-    // Plot progress visualization
-    bool m_showPlotProgress{false};
+    // Cached window sizes
+    ImVec2 m_lastMapSize{0, 0};
+    ImVec2 m_lastTimelineSize{0, 0};
 };
