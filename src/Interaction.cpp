@@ -8,7 +8,7 @@ void InteractionController::onMouseDown(AppModel &model, Camera &camera, const V
     m_state.mouseDownWorld = mouseWorld;
     m_state.mode = InteractionMode::PanningCamera;
     m_cameraStart = camera.Transform();
-    m_cameraStartCenterMm = camera.center();
+    m_cameraStartCenter = camera.center();
 }
 
 void InteractionController::beginPan(Camera &camera, const Vec2 &mouseWorld)
@@ -16,7 +16,7 @@ void InteractionController::beginPan(Camera &camera, const Vec2 &mouseWorld)
     m_state.mouseDownWorld = mouseWorld;
     m_state.mode = InteractionMode::PanningCamera;
     m_cameraStart = camera.Transform();
-    m_cameraStartCenterMm = camera.center();
+    m_cameraStartCenter = camera.center();
 }
 
 void InteractionController::onCursorPos(AppModel &model, Camera &camera, const Vec2 &mouseWorld)

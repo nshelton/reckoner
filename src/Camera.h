@@ -6,10 +6,12 @@
 #include "core/Mat3.h"
 #include <cmath>
 
+/// Camera manages the view transformation between world and screen coordinates
+/// Supports pan (move) and zoom operations
+/// Uses an orthographic projection for 2D visualization
 class Camera
 {
 public:
-
     Camera();
 
     void setSize(int width, int height);

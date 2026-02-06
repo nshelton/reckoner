@@ -1,27 +1,26 @@
 #pragma once
 
-#include <optional>
 #include "core/Vec2.h"
 #include "core/Mat3.h"
 #include "Camera.h"
 
-#define HANDLE_HITBOX_RADIUS 10.0f
+class AppModel;
 
+/// Tracks the current interaction mode
 enum class InteractionMode
 {
     None,
     PanningCamera,
 };
 
+/// Public state of the interaction system (for rendering feedback)
 struct InteractionState
 {
     InteractionMode mode = InteractionMode::None;
-    Mat3 dragEntityStartTransform; // cached for drags
-    Vec2 mouseDownWorld; // cached for drags
+    Vec2 mouseDownWorld;  // World position where interaction started
 };
 
-class AppModel;
-
+/// Handles user input and maps it to camera/model updates
 class InteractionController
 {
 public:
@@ -36,5 +35,5 @@ public:
 private:
     InteractionState m_state;
     Mat3 m_cameraStart;
-    Vec2 m_cameraStartCenterMm;
+    Vec2 m_cameraStartCenter;  // Camera center when interaction started
 };

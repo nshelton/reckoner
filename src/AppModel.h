@@ -1,7 +1,8 @@
 #pragma once
 
+/// Geographic bounds for the map view
 struct SpatialExtent {
-    double min_lat = 34.0;
+    double min_lat = 34.0;   // Default: LA area
     double max_lat = 34.1;
     double min_lon = -118.3;
     double max_lon = -118.2;
@@ -10,15 +11,14 @@ struct SpatialExtent {
     double lon_span() const { return max_lon - min_lon; }
 };
 
+/// Central application state
+/// Future: Will contain TimeExtent, Layers, selection state
 class AppModel {
 public:
-    SpatialExtent spatial_extent;
+    SpatialExtent spatial_extent;  // Geographic bounds for map view
 
-    AppModel() {
-        // Default to LA area
-        spatial_extent.min_lat = 34.0;
-        spatial_extent.max_lat = 34.1;
-        spatial_extent.min_lon = -118.3;
-        spatial_extent.max_lon = -118.2;
-    }
+    // Future additions:
+    // TimeExtent time_extent;
+    // std::vector<std::unique_ptr<Layer>> layers;
+    // Entity* selected_entity;
 };
