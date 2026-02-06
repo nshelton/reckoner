@@ -4,7 +4,7 @@
 #include "core/Mat3.h"
 #include "core/Color.h"
 #include "renderer/LineRenderer.h"
-#include "render/PointRenderer.h"
+#include "renderer/PointRenderer.h"
 #include "Interaction.h"
 #include "AppModel.h"
 #include "Camera.h"

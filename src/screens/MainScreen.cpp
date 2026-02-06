@@ -76,6 +76,9 @@ void MainScreen::onScroll(double /*xoffset*/, double yoffset, Vec2 px)
 
 void MainScreen::onGui()
 {
+    m_mapViewportValid = false;
+    m_timelineViewportValid = false;
+
     // Map Window
     ImGui::Begin("Map");
     {
@@ -124,46 +127,14 @@ void MainScreen::onGui()
         ImGuiIO& io = ImGui::GetIO();
         float fbScale = fbWidth / io.DisplaySize.x;
 
-        int x = static_cast<int>(cursorPos.x * fbScale);
-        int y = static_cast<int>((io.DisplaySize.y - cursorPos.y - contentSize.y) * fbScale);
-        int w = static_cast<int>(contentSize.x * fbScale);
-        int h = static_cast<int>(contentSize.y * fbScale);
-
-        // Debug output
-        static bool first_render = true;
-        if (first_render) {
-            std::cout << "Map viewport: x=" << x << " y=" << y << " w=" << w << " h=" << h << std::endl;
-            std::cout << "Content size: " << contentSize.x << " x " << contentSize.y << std::endl;
-            std::cout << "FB scale: " << fbScale << std::endl;
-            first_render = false;
-        }
+        m_mapViewport.x = static_cast<int>(cursorPos.x * fbScale);
+        m_mapViewport.y = static_cast<int>((io.DisplaySize.y - cursorPos.y - contentSize.y) * fbScale);
+        m_mapViewport.w = static_cast<int>(contentSize.x * fbScale);
+        m_mapViewport.h = static_cast<int>(contentSize.y * fbScale);
+        m_mapViewportValid = true;
 
         // IMPORTANT: Set camera size right before rendering
-        // (other windows may have changed it)
-        static bool first_camera_set = true;
-        if (first_camera_set) {
-            std::cout << "MAP: Setting camera to " << contentSize.x << " x " << contentSize.y << std::endl;
-            first_camera_set = false;
-        }
         m_camera.setSize(static_cast<int>(contentSize.x), static_cast<int>(contentSize.y));
-
-        // Set viewport and enable scissor test to clip to this region
-        glViewport(x, y, w, h);
-        glScissor(x, y, w, h);
-        glEnable(GL_SCISSOR_TEST);
-
-        // Clear background to dark gray
-        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // Render the grid and entities
-        m_renderer.render(m_camera, m_model, m_interaction.state());
-
-        // Disable scissor test
-        glDisable(GL_SCISSOR_TEST);
-
-        // Reset viewport to full window
-        glViewport(0, 0, fbWidth, fbHeight);
 
         // Display camera info and controls
         ImGui::SetCursorPos(ImVec2(10, 10));
@@ -250,6 +221,33 @@ void MainScreen::onGui()
         }
     }
     ImGui::End();
+}
+
+void MainScreen::onPostGuiRender()
+{
+    if (m_mapViewportValid)
+    {
+        int fbWidth, fbHeight;
+        glfwGetFramebufferSize(m_app->window(), &fbWidth, &fbHeight);
+
+        // Set viewport and enable scissor test to clip to this region
+        glViewport(m_mapViewport.x, m_mapViewport.y, m_mapViewport.w, m_mapViewport.h);
+        glScissor(m_mapViewport.x, m_mapViewport.y, m_mapViewport.w, m_mapViewport.h);
+        glEnable(GL_SCISSOR_TEST);
+
+        // Clear background to dark gray
+        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Render the grid and entities
+        m_renderer.render(m_camera, m_model, m_interaction.state());
+
+        // Disable scissor test
+        glDisable(GL_SCISSOR_TEST);
+
+        // Reset viewport to full window
+        glViewport(0, 0, fbWidth, fbHeight);
+    }
 }
 
 void MainScreen::refreshDataIfExtentChanged()
