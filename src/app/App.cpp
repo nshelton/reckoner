@@ -120,6 +120,9 @@ void App::run(IScreen &screen)
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+        // Draw canvas content (map, timeline) on top of ImGui so it is visible
+        screen.onPostGuiRender();
+
         glfwSwapBuffers(m_window);
         glfwPollEvents();
 

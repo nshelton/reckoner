@@ -4,6 +4,7 @@
 #include "core/Mat3.h"
 #include "core/Color.h"
 #include "renderer/LineRenderer.h"
+#include "render/PointRenderer.h"
 #include "Interaction.h"
 #include "AppModel.h"
 #include "Camera.h"
@@ -34,9 +35,12 @@ public:
 
     // Debug/stats
     int totalVertices() const { return static_cast<int>(m_lines.totalVertices()); }
+    int totalPoints() const { return static_cast<int>(m_points.pointCount()); }
 
 private:
     LineRenderer m_lines{};
+    PointRenderer m_points{};
 
     void renderGrid(const Camera &camera, const AppModel &model);
+    void renderEntities(const Camera &camera, const AppModel &model);
 };

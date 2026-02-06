@@ -22,7 +22,8 @@ void Camera::setSize(int width, int height)
     m_top = center.y + m_zoom;
 
     m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
-    std::cout << "Camera setSize: " << width << "x" << height << ", aspect: " << m_aspect << std::endl;
+    // Debug output disabled - enable in MainScreen instead
+    // std::cout << "Camera setSize: " << width << "x" << height << ", aspect: " << m_aspect << std::endl;
 }
 
 

@@ -2,22 +2,35 @@
 #include "app/App.h"
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <cmath>
+#include <future>
 
 void MainScreen::onAttach(App &app)
 {
     m_app = &app;
     std::cout << "MainScreen attached" << std::endl;
+
+    // Initialize backend with 1000 points
+    m_backend = std::make_unique<FakeBackend>(1000);
+
+    // Cache initial extents
+    m_lastSpatialExtent = m_model.spatial_extent;
+    m_lastTimeExtent = m_model.time_extent;
+
+    // Do initial fetch
+    fetchData();
 }
 
 void MainScreen::onResize(int width, int height)
 {
-    m_renderer.setSize(width, height);
-    m_camera.setSize(width, height);
+    // Note: Camera size is set per-window in onGui()
+    // Don't set it here as it would override the per-window settings
 }
 
 void MainScreen::onUpdate(double /*dt*/)
 {
-    // Nothing to update yet
+    // Check if extent changed and trigger refresh
+    refreshDataIfExtentChanged();
 }
 
 void MainScreen::onRender()
@@ -68,14 +81,13 @@ void MainScreen::onGui()
     {
         ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-        // Update camera size only if window size changed
+        // Cache size for change detection
         if (contentSize.x != m_lastMapSize.x || contentSize.y != m_lastMapSize.y)
         {
-            m_camera.setSize(static_cast<int>(contentSize.x), static_cast<int>(contentSize.y));
             m_lastMapSize = contentSize;
         }
 
-        // Render the map content
+        // Get the position where we'll render
         ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 
         // Create an invisible button to capture mouse input
@@ -105,16 +117,64 @@ void MainScreen::onGui()
             }
         }
 
-        // Render the grid
+        // Set up OpenGL viewport and scissor for this ImGui window
+        int fbWidth, fbHeight;
+        glfwGetFramebufferSize(m_app->window(), &fbWidth, &fbHeight);
+
+        ImGuiIO& io = ImGui::GetIO();
+        float fbScale = fbWidth / io.DisplaySize.x;
+
+        int x = static_cast<int>(cursorPos.x * fbScale);
+        int y = static_cast<int>((io.DisplaySize.y - cursorPos.y - contentSize.y) * fbScale);
+        int w = static_cast<int>(contentSize.x * fbScale);
+        int h = static_cast<int>(contentSize.y * fbScale);
+
+        // Debug output
+        static bool first_render = true;
+        if (first_render) {
+            std::cout << "Map viewport: x=" << x << " y=" << y << " w=" << w << " h=" << h << std::endl;
+            std::cout << "Content size: " << contentSize.x << " x " << contentSize.y << std::endl;
+            std::cout << "FB scale: " << fbScale << std::endl;
+            first_render = false;
+        }
+
+        // IMPORTANT: Set camera size right before rendering
+        // (other windows may have changed it)
+        static bool first_camera_set = true;
+        if (first_camera_set) {
+            std::cout << "MAP: Setting camera to " << contentSize.x << " x " << contentSize.y << std::endl;
+            first_camera_set = false;
+        }
+        m_camera.setSize(static_cast<int>(contentSize.x), static_cast<int>(contentSize.y));
+
+        // Set viewport and enable scissor test to clip to this region
+        glViewport(x, y, w, h);
+        glScissor(x, y, w, h);
+        glEnable(GL_SCISSOR_TEST);
+
+        // Clear background to dark gray
+        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Render the grid and entities
         m_renderer.render(m_camera, m_model, m_interaction.state());
 
-        // Display camera info
+        // Disable scissor test
+        glDisable(GL_SCISSOR_TEST);
+
+        // Reset viewport to full window
+        glViewport(0, 0, fbWidth, fbHeight);
+
+        // Display camera info and controls
         ImGui::SetCursorPos(ImVec2(10, 10));
-        ImGui::BeginChild("MapInfo", ImVec2(200, 80), true);
+        ImGui::BeginChild("MapInfo", ImVec2(220, 100), true);
         ImGui::Text("Map View");
         Vec2 center = m_camera.center();
         ImGui::Text("Center: %.1f, %.1f", center.x, center.y);
         ImGui::Text("Zoom: %.2f", m_camera.zoom());
+        if (ImGui::Button("Reset View")) {
+            m_camera.reset();
+        }
         ImGui::EndChild();
     }
     ImGui::End();
@@ -151,6 +211,94 @@ void MainScreen::onGui()
         {
             m_camera.reset();
         }
+
+        ImGui::Separator();
+        ImGui::Text("Backend Stats:");
+        ImGui::Text("Entities: %zu", m_model.entities.size());
+        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
+
+        // Debug: show first entity location if any
+        if (!m_model.entities.empty() && m_model.entities[0].has_location()) {
+            auto& e = m_model.entities[0];
+            ImGui::Text("First entity:");
+            ImGui::Text("  lat: %.6f, lon: %.6f", *e.lat, *e.lon);
+            Vec2 norm = m_model.spatial_extent.to_normalized(*e.lat, *e.lon);
+            ImGui::Text("  norm: %.3f, %.3f", norm.x, norm.y);
+            Vec2 world(norm.x * 100.0f, norm.y * 100.0f);
+            ImGui::Text("  world: %.1f, %.1f", world.x, world.y);
+        }
+
+        if (m_model.is_fetching) {
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Fetching...");
+        } else {
+            ImGui::Text("Status: Ready");
+        }
+
+        // Latency ring buffer stats
+        if (m_model.fetch_latencies.count() > 0) {
+            ImGui::Separator();
+            ImGui::Text("Fetch Latency (ms):");
+            ImGui::Text("  Avg: %.1f", m_model.fetch_latencies.average());
+            ImGui::Text("  Min: %.1f", m_model.fetch_latencies.min());
+            ImGui::Text("  Max: %.1f", m_model.fetch_latencies.max());
+            ImGui::Text("  Samples: %zu", m_model.fetch_latencies.count());
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("Refresh Data")) {
+            fetchData();
+        }
     }
     ImGui::End();
+}
+
+void MainScreen::refreshDataIfExtentChanged()
+{
+    // Update spatial extent from camera
+    Vec2 center = m_camera.center();
+    double zoom = m_camera.zoom();
+    double half_width = 50.0 / zoom;  // Our world is 100 units
+    double half_height = 50.0 / zoom;
+
+    m_model.spatial_extent.min_lon = -118.3 + (center.x / 100.0) * 0.1 - half_width * 0.001;
+    m_model.spatial_extent.max_lon = -118.3 + (center.x / 100.0) * 0.1 + half_width * 0.001;
+    m_model.spatial_extent.min_lat = 34.0 + (center.y / 100.0) * 0.1 - half_height * 0.001;
+    m_model.spatial_extent.max_lat = 34.0 + (center.y / 100.0) * 0.1 + half_height * 0.001;
+
+    // Check if extent changed significantly (more than 1%)
+    bool spatial_changed =
+        std::abs(m_model.spatial_extent.min_lat - m_lastSpatialExtent.min_lat) > 0.001 ||
+        std::abs(m_model.spatial_extent.max_lat - m_lastSpatialExtent.max_lat) > 0.001 ||
+        std::abs(m_model.spatial_extent.min_lon - m_lastSpatialExtent.min_lon) > 0.001 ||
+        std::abs(m_model.spatial_extent.max_lon - m_lastSpatialExtent.max_lon) > 0.001;
+
+    bool time_changed =
+        std::abs(m_model.time_extent.start - m_lastTimeExtent.start) > 100.0 ||
+        std::abs(m_model.time_extent.end - m_lastTimeExtent.end) > 100.0;
+
+    if ((spatial_changed || time_changed) && !m_model.is_fetching) {
+        m_lastSpatialExtent = m_model.spatial_extent;
+        m_lastTimeExtent = m_model.time_extent;
+        fetchData();
+    }
+}
+
+void MainScreen::fetchData()
+{
+    if (m_model.is_fetching) return;  // Already fetching
+
+    m_model.startFetch();
+
+    // Launch async fetch
+    m_pendingFetch = std::async(std::launch::async, [this]() {
+        m_backend->fetchEntities(
+            m_model.time_extent,
+            m_model.spatial_extent,
+            [this](std::vector<Entity>&& entities) {
+                // Update model on main thread (will be read in next frame)
+                m_model.entities = std::move(entities);
+                m_model.endFetch();
+            }
+        );
+    });
 }

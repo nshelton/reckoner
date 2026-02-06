@@ -25,4 +25,7 @@ public:
 
     // UI (ImGui) hook
     virtual void onGui() {}
+
+    /// Called after ImGui::Render() so OpenGL content can be drawn on top of ImGui windows.
+    virtual void onPostGuiRender() {}
 };
