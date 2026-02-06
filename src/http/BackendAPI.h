@@ -10,7 +10,7 @@
 /// High-level API for fetching entities from the backend
 class BackendAPI {
 public:
-    explicit BackendAPI(const std::string& base_url);
+    explicit BackendAPI(const std::string& base_url, const std::string& api_key = "");
 
     /// Fetch entities via spatial + temporal query
     /// @param type Entity type (e.g., "location.gps")

@@ -8,7 +8,11 @@
 class HttpBackend : public Backend {
 public:
     /// Create HTTP backend with base URL (e.g., "http://localhost:8000")
+    /// Automatically loads API key from external/spatiotemporal_db/.env
     explicit HttpBackend(const std::string& base_url, const std::string& entity_type = "location.gps");
+
+    /// Create HTTP backend with explicit API key
+    HttpBackend(const std::string& base_url, const std::string& api_key, const std::string& entity_type);
 
     void fetchEntities(
         const TimeExtent& time,

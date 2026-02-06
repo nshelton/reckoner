@@ -40,7 +40,7 @@ private:
 
     // Backend configuration
     enum class BackendType { Fake, Http };
-    BackendType m_backendType = BackendType::Fake;
+    BackendType m_backendType = BackendType::Http;
     char m_backendUrl[256] = "http://localhost:8000";
     char m_entityType[128] = "location.gps";
 

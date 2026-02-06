@@ -7,7 +7,14 @@
 class HttpClient {
 public:
     HttpClient() = default;
+    explicit HttpClient(const std::string& api_key) : m_apiKey(api_key) {}
     ~HttpClient() = default;
+
+    /// Set the API key for authenticated requests
+    void setApiKey(const std::string& api_key) { m_apiKey = api_key; }
+
+    /// Get the current API key
+    const std::string& apiKey() const { return m_apiKey; }
 
     /// Make a POST request with JSON body
     /// @param url Full URL to POST to
@@ -18,4 +25,5 @@ public:
 
 private:
     static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp);
+    std::string m_apiKey;
 };

@@ -2,9 +2,13 @@
 #include "core/TimeUtils.h"
 #include <iostream>
 
-BackendAPI::BackendAPI(const std::string& base_url)
+BackendAPI::BackendAPI(const std::string& base_url, const std::string& api_key)
     : base_url_(base_url)
+    , http_client_(api_key)
 {
+    if (!api_key.empty()) {
+        std::cout << "BackendAPI: Using API key authentication" << std::endl;
+    }
 }
 
 std::vector<Entity> BackendAPI::fetch_bbox(
@@ -14,6 +18,7 @@ std::vector<Entity> BackendAPI::fetch_bbox(
     int limit
 ) {
     // Build request according to design doc
+    // Note: API key is sent via HTTP header, not in the JSON body
     nlohmann::json request = {
         {"types", nlohmann::json::array({type})},  // single-element array
         {"bbox", nlohmann::json::array({

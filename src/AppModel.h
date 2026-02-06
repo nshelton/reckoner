@@ -9,10 +9,10 @@
 
 /// Geographic bounds for the map view
 struct SpatialExtent {
-    double min_lat = 34.0;   // Default: LA area
-    double max_lat = 34.1;
-    double min_lon = -118.3;
-    double max_lon = -118.2;
+    double min_lat = 33.95;   // Default: Full LA area with data
+    double max_lat = 34.20;
+    double min_lon = -118.80;
+    double max_lon = -118.10;
 
     double lat_span() const { return max_lat - min_lat; }
     double lon_span() const { return max_lon - min_lon; }
@@ -75,7 +75,7 @@ private:
 class AppModel {
 public:
     SpatialExtent spatial_extent;  // Geographic bounds for map view
-    TimeExtent time_extent{0.0, 86400.0};  // Default: 1 day
+    TimeExtent time_extent{0.0, 1770348932};  // Default: 1970 - now
 
     std::vector<Entity> entities;  // Entities currently loaded
 

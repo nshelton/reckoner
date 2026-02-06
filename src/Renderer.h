@@ -33,6 +33,9 @@ public:
     void setLineWidth(float w) { m_lines.setLineWidth(w); }
     float lineWidth() const { return m_lines.lineWidth(); }
 
+    void setPointSize(float size) { m_pointSize = size; }
+    float pointSize() const { return m_pointSize; }
+
     // Debug/stats
     int totalVertices() const { return static_cast<int>(m_lines.totalVertices()); }
     int totalPoints() const { return static_cast<int>(m_points.pointCount()); }

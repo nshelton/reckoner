@@ -18,14 +18,20 @@ out vec4 v_color;
 out vec2 v_coord;
 
 uniform mat3 u_viewProjection;
+uniform float u_aspectRatio;
 
 void main() {
-    // Offset by quad vertex * size
-    vec2 offset = in_quad_vertex * in_size;
+    // Transform center position to NDC first
+    vec3 center_ndc = u_viewProjection * vec3(in_position, 1.0);
 
-    // Transform position
-    vec3 pos = u_viewProjection * vec3(in_position + offset, 1.0);
-    gl_Position = vec4(pos.xy, 0.0, 1.0);
+    // Apply size offset in NDC space (after projection)
+    // Scale by 0.01 to make size values reasonable (1.0 = ~1% of screen)
+    vec2 offset_ndc = in_quad_vertex * in_size * 0.01;
+
+    // Compensate for aspect ratio to keep points circular
+    offset_ndc.x /= u_aspectRatio;
+
+    gl_Position = vec4(center_ndc.xy + offset_ndc, 0.0, 1.0);
 
     v_color = in_color;
     v_coord = in_quad_vertex;  // -1 to 1 for circular rendering
@@ -150,8 +156,9 @@ void PointRenderer::cleanup() {
     if (m_shader) glDeleteProgram(m_shader);
 }
 
-void PointRenderer::begin(const Mat3& viewProjection) {
+void PointRenderer::begin(const Mat3& viewProjection, float aspectRatio) {
     m_viewProjection = viewProjection;
+    m_aspectRatio = aspectRatio;
     m_points.clear();
 }
 
@@ -174,6 +181,10 @@ void PointRenderer::end() {
     // Upload view-projection matrix
     GLint loc = glGetUniformLocation(m_shader, "u_viewProjection");
     glUniformMatrix3fv(loc, 1, GL_FALSE, m_viewProjection.m);
+
+    // Upload aspect ratio
+    GLint aspectLoc = glGetUniformLocation(m_shader, "u_aspectRatio");
+    glUniform1f(aspectLoc, m_aspectRatio);
 
     // Upload instance data
     glBindVertexArray(m_vao);

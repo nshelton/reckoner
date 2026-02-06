@@ -6,9 +6,10 @@
 #include "core/Mat3.h"
 #include <cmath>
 
-/// Camera manages the view transformation between world and screen coordinates
+/// Camera manages the view transformation in geographic coordinates (lat/lon)
 /// Supports pan (move) and zoom operations
 /// Uses an orthographic projection for 2D visualization
+/// All coordinates are in degrees (latitude/longitude)
 class Camera
 {
 public:
@@ -71,18 +72,19 @@ private:
 
     Vec2 m_last;
 
-    // page (mm) to ndc transform
+    // Geographic (lat/lon in degrees) to NDC transform
     Mat3 m_viewTransform;
 
-    // zoom is the vertical half-size in mm
+    // zoom is the vertical half-size in degrees
     float m_zoom;
 
-    float m_left;
-    float m_right;
-    float m_top;
-    float m_bottom;
+    float m_left;   // min longitude (degrees)
+    float m_right;  // max longitude (degrees)
+    float m_top;    // max latitude (degrees)
+    float m_bottom; // min latitude (degrees)
     float m_aspect;
 
-    float m_minZoom{0.1f};
-    float m_maxZoom{10.0f};
+    // Min/max zoom in degrees (larger = more zoomed out)
+    float m_minZoom{0.001f};  // Very zoomed in (~100 meters)
+    float m_maxZoom{10.0f};   // Very zoomed out (~1000 km)
 };

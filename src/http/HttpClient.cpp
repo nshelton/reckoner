@@ -28,6 +28,13 @@ nlohmann::json HttpClient::post(const std::string& url, const nlohmann::json& js
     // Set headers
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    // Add API key if present
+    if (!m_apiKey.empty()) {
+        std::string auth_header = "X-API-Key: " + m_apiKey;
+        headers = curl_slist_append(headers, auth_header.c_str());
+    }
+
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
     // Set up response callback

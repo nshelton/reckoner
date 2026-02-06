@@ -1,12 +1,35 @@
 #include "HttpBackend.h"
+#include "core/EnvLoader.h"
 #include <iostream>
 
 HttpBackend::HttpBackend(const std::string& base_url, const std::string& entity_type)
-    : m_api(std::make_unique<BackendAPI>(base_url))
+    : m_entityType(entity_type)
+{
+    // Load API key from env file
+    auto env = EnvLoader::load("external/spatiotemporal_db/.env");
+    std::string api_key = EnvLoader::get(env, "API_KEY");
+
+    if (api_key.empty()) {
+        std::cerr << "Warning: No API_KEY found in external/spatiotemporal_db/.env" << std::endl;
+    } else {
+        std::cout << "Loaded API key from env file (length: " << api_key.length() << ")" << std::endl;
+    }
+
+    m_api = std::make_unique<BackendAPI>(base_url, api_key);
+
+    std::cout << "HttpBackend initialized with URL: " << base_url << std::endl;
+    std::cout << "Entity type: " << entity_type << std::endl;
+}
+
+HttpBackend::HttpBackend(const std::string& base_url, const std::string& api_key, const std::string& entity_type)
+    : m_api(std::make_unique<BackendAPI>(base_url, api_key))
     , m_entityType(entity_type)
 {
     std::cout << "HttpBackend initialized with URL: " << base_url << std::endl;
     std::cout << "Entity type: " << entity_type << std::endl;
+    if (!api_key.empty()) {
+        std::cout << "Using explicit API key (length: " << api_key.length() << ")" << std::endl;
+    }
 }
 
 void HttpBackend::fetchEntities(

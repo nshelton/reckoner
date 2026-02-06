@@ -3,7 +3,7 @@
 
 Camera::Camera()
 {
-    m_zoom = 200.0f; // initial zoom
+    m_zoom = 0.15f; // initial zoom in degrees (~16 km vertical)
     m_aspect = 4.0f / 3.0f; // default aspect
     reset();
 }
@@ -36,17 +36,24 @@ void Camera::move(Vec2 delta) {
 }
 
 void Camera::reset() {
+    // Center on LA area where the data is
+    // Longitude: -118.45 (center of data -118.78 to -118.13)
+    // Latitude: 34.08 (center of data 33.98 to 34.17)
+    Vec2 center = Vec2(-118.45f, 34.08f);
 
-    // initial 500mm half-width view
-    Vec2 center = Vec2(297.0f / 2.0f, 420.0f / 2.0f);
-    m_left = -m_aspect * m_zoom + center.x;
-    m_right = m_aspect * m_zoom + center.x;
-    m_bottom = -m_zoom + center.y;
-    m_top = m_zoom + center.y;
+    // Reset zoom to initial value
+    m_zoom = 0.15f;
+
+    m_left = center.x - m_aspect * m_zoom;
+    m_right = center.x + m_aspect * m_zoom;
+    m_bottom = center.y - m_zoom;
+    m_top = center.y + m_zoom;
 
     m_viewTransform = Mat3();
-
     m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
+
+    std::cout << "Camera reset to LA area: lon [" << m_left << ", " << m_right
+              << "], lat [" << m_bottom << ", " << m_top << "]" << std::endl;
 }
 
 void Camera::zoomAtPixel(const Vec2 &px, float wheelSteps)
@@ -62,8 +69,9 @@ void Camera::zoomAtPixel(const Vec2 &px, float wheelSteps)
     // zoom factor (>1 zooms in)
     float factor = std::pow(1.1f, wheelSteps);
 
-    // update zoom (vertical half-size in mm)
-    m_zoom = m_zoom / factor; // clamp here if you add sensible mm bounds
+    // update zoom (vertical half-size in degrees) with clamping
+    m_zoom = m_zoom / factor;
+    m_zoom = clamp(m_zoom, m_minZoom, m_maxZoom);
 
     // choose new center so anchor stays fixed under cursor
     Vec2 newCenter;

@@ -26,47 +26,69 @@ void Renderer::shutdown()
 
 void Renderer::renderGrid(const Camera &camera, const AppModel &model)
 {
-   // Simple test grid in world coordinates (0-100 range)
-   // TODO: Replace with proper lat/lon grid based on SpatialExtent
-   Color gridCol = Color(0.5f, 0.5f, 0.5f, 1.0f);  // Brighter gray
+   // Draw lat/lon grid based on the spatial extent
+   Color gridCol = Color(0.5f, 0.5f, 0.5f, 1.0f);  // Gray grid lines
 
-   // Draw a 100x100 grid with lines every 10 units
-   for (float x = 0.0f; x <= 100.0f; x += 10.0f)
+   const auto& extent = model.spatial_extent;
+
+   // Determine grid spacing based on view size
+   double lon_span = extent.max_lon - extent.min_lon;
+   double lat_span = extent.max_lat - extent.min_lat;
+
+   // Choose nice grid spacing (0.01, 0.05, 0.1, 0.5, 1.0, 5.0 degrees)
+   auto getNiceStep = [](double span) -> double {
+      double target = span / 8.0; // Aim for ~8 grid lines
+      if (target < 0.01) return 0.01;
+      if (target < 0.05) return 0.05;
+      if (target < 0.1) return 0.1;
+      if (target < 0.5) return 0.5;
+      if (target < 1.0) return 1.0;
+      return 5.0;
+   };
+
+   double lon_step = getNiceStep(lon_span);
+   double lat_step = getNiceStep(lat_span);
+
+   // Draw longitude lines (vertical)
+   double lon_start = std::floor(extent.min_lon / lon_step) * lon_step;
+   for (double lon = lon_start; lon <= extent.max_lon; lon += lon_step)
    {
-      m_lines.addLine(Vec2(x, 0.0f), Vec2(x, 100.0f), gridCol);
+      m_lines.addLine(Vec2(lon, extent.min_lat), Vec2(lon, extent.max_lat), gridCol);
    }
-   for (float y = 0.0f; y <= 100.0f; y += 10.0f)
+
+   // Draw latitude lines (horizontal)
+   double lat_start = std::floor(extent.min_lat / lat_step) * lat_step;
+   for (double lat = lat_start; lat <= extent.max_lat; lat += lat_step)
    {
-      m_lines.addLine(Vec2(0.0f, y), Vec2(100.0f, y), gridCol);
+      m_lines.addLine(Vec2(extent.min_lon, lat), Vec2(extent.max_lon, lat), gridCol);
    }
 }
 
 void Renderer::renderEntities(const Camera &camera, const AppModel &model)
 {
-   m_points.begin(camera.Transform());
+   float aspectRatio = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
+   m_points.begin(camera.Transform(), aspectRatio);
 
    int rendered_count = 0;
    // Render entities that have location data
+   // Entities are already in lat/lon coordinates - use them directly!
    for (const auto& entity : model.entities)
    {
       if (!entity.has_location()) continue;
 
-      // Convert lat/lon to normalized [0,1] space
-      Vec2 normalized = model.spatial_extent.to_normalized(*entity.lat, *entity.lon);
+      // Use lat/lon coordinates directly (longitude=x, latitude=y)
+      Vec2 geoPos(*entity.lon, *entity.lat);
 
-      // Scale to world space (matching our 100x100 grid)
-      Vec2 worldPos(normalized.x * 100.0f, normalized.y * 100.0f);
-
-      // Render as a bright red point (easier to see)
+      // Render as a bright red point
       Color pointColor(1.0f, 0.0f, 0.0f, 1.0f);
-      m_points.addPoint(worldPos, pointColor, m_pointSize);  // Larger size
+      m_points.addPoint(geoPos, pointColor, m_pointSize);
       rendered_count++;
    }
 
    // Debug output on first render
    static bool first_render = true;
    if (first_render && rendered_count > 0) {
-      std::cout << "PointRenderer: Rendering " << rendered_count << " points" << std::endl;
+      std::cout << "PointRenderer: Rendering " << rendered_count << " points in lat/lon coordinates" << std::endl;
       first_render = false;
    }
 

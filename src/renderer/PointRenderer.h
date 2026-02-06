@@ -17,7 +17,7 @@ public:
     ~PointRenderer();
 
     /// Begin a new frame of point rendering
-    void begin(const Mat3& viewProjection);
+    void begin(const Mat3& viewProjection, float aspectRatio);
 
     /// Add a point to the batch (world space coordinates)
     void addPoint(const Vec2& pos, const Color& color, float size = 1.0f);
@@ -37,6 +37,7 @@ private:
 
     std::vector<PointVertex> m_points;
     Mat3 m_viewProjection;
+    float m_aspectRatio = 1.0f;
 
     // OpenGL resources
     GLuint m_vao = 0;

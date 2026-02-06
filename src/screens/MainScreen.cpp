@@ -43,7 +43,7 @@ void MainScreen::onDetach()
     m_renderer.shutdown();
 }
 
-void MainScreen::onFilesDropped(const std::vector<std::string>& /*paths*/)
+void MainScreen::onFilesDropped(const std::vector<std::string> & /*paths*/)
 {
     // Not implemented yet
 }
@@ -99,7 +99,7 @@ void MainScreen::onGui()
         // Handle mouse input for this window
         if (ImGui::IsItemHovered())
         {
-            ImGuiIO& io = ImGui::GetIO();
+            ImGuiIO &io = ImGui::GetIO();
 
             // Pan with left mouse drag
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
@@ -124,7 +124,7 @@ void MainScreen::onGui()
         int fbWidth, fbHeight;
         glfwGetFramebufferSize(m_app->window(), &fbWidth, &fbHeight);
 
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         float fbScale = fbWidth / io.DisplaySize.x;
 
         m_mapViewport.x = static_cast<int>(cursorPos.x * fbScale);
@@ -135,18 +135,6 @@ void MainScreen::onGui()
 
         // IMPORTANT: Set camera size right before rendering
         m_camera.setSize(static_cast<int>(contentSize.x), static_cast<int>(contentSize.y));
-
-        // Display camera info and controls
-        ImGui::SetCursorPos(ImVec2(10, 10));
-        ImGui::BeginChild("MapInfo", ImVec2(220, 100), true);
-        ImGui::Text("Map View");
-        Vec2 center = m_camera.center();
-        ImGui::Text("Center: %.1f, %.1f", center.x, center.y);
-        ImGui::Text("Zoom: %.2f", m_camera.zoom());
-        if (ImGui::Button("Reset View")) {
-            m_camera.reset();
-        }
-        ImGui::EndChild();
     }
     ImGui::End();
 
@@ -160,10 +148,6 @@ void MainScreen::onGui()
         ImGui::Separator();
         ImGui::Text("Size: %.0f x %.0f", contentSize.x, contentSize.y);
 
-        // TODO: Implement timeline rendering
-        // - Time axis with nice intervals
-        // - Events as bars or ticks
-        // - Pan/zoom in time dimension
     }
     ImGui::End();
 
@@ -187,45 +171,60 @@ void MainScreen::onGui()
         ImGui::Text("Backend Configuration:");
 
         // Backend type selector
-        const char* backend_types[] = { "Fake Data", "HTTP Backend" };
+        const char *backend_types[] = {"Fake Data", "HTTP Backend"};
         int current_type = static_cast<int>(m_backendType);
-        if (ImGui::Combo("Backend Type", &current_type, backend_types, 2)) {
+        if (ImGui::Combo("Backend Type", &current_type, backend_types, 2))
+        {
             switchBackend(static_cast<BackendType>(current_type));
         }
 
         // HTTP backend configuration
-        if (m_backendType == BackendType::Http) {
+        if (m_backendType == BackendType::Http)
+        {
             ImGui::InputText("Backend URL", m_backendUrl, sizeof(m_backendUrl));
             ImGui::InputText("Entity Type", m_entityType, sizeof(m_entityType));
-            if (ImGui::Button("Apply HTTP Config")) {
+            if (ImGui::Button("Apply HTTP Config"))
+            {
                 switchBackend(BackendType::Http);
             }
         }
+
+        ImGui::Separator();
+        ImGui::Text("View Extent:");
+        ImGui::Text("Lon: %.6f° to %.6f°",
+            m_model.spatial_extent.min_lon,
+            m_model.spatial_extent.max_lon);
+        ImGui::Text("Lat: %.6f° to %.6f°",
+            m_model.spatial_extent.min_lat,
+            m_model.spatial_extent.max_lat);
 
         ImGui::Separator();
         ImGui::Text("Backend Stats:");
         ImGui::Text("Entities: %zu", m_model.entities.size());
         ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
 
-        // Debug: show first entity location if any
-        if (!m_model.entities.empty() && m_model.entities[0].has_location()) {
-            auto& e = m_model.entities[0];
+        // Debug: show first entity location
+        if (!m_model.entities.empty() && m_model.entities[0].has_location())
+        {
+            ImGui::Separator();
+            auto &e = m_model.entities[0];
             ImGui::Text("First entity:");
-            ImGui::Text("  lat: %.6f, lon: %.6f", *e.lat, *e.lon);
-            Vec2 norm = m_model.spatial_extent.to_normalized(*e.lat, *e.lon);
-            ImGui::Text("  norm: %.3f, %.3f", norm.x, norm.y);
-            Vec2 world(norm.x * 100.0f, norm.y * 100.0f);
-            ImGui::Text("  world: %.1f, %.1f", world.x, world.y);
+            ImGui::Text("  Lon: %.6f°", *e.lon);
+            ImGui::Text("  Lat: %.6f°", *e.lat);
         }
 
-        if (m_model.is_fetching) {
+        if (m_model.is_fetching)
+        {
             ImGui::TextColored(ImVec4(1, 1, 0, 1), "Fetching...");
-        } else {
+        }
+        else
+        {
             ImGui::Text("Status: Ready");
         }
 
         // Latency ring buffer stats
-        if (m_model.fetch_latencies.count() > 0) {
+        if (m_model.fetch_latencies.count() > 0)
+        {
             ImGui::Separator();
             ImGui::Text("Fetch Latency (ms):");
             ImGui::Text("  Avg: %.1f", m_model.fetch_latencies.average());
@@ -235,9 +234,29 @@ void MainScreen::onGui()
         }
 
         ImGui::Separator();
-        if (ImGui::Button("Refresh Data")) {
+        ImGui::Text("Rendering:");
+        float pointSize = m_renderer.pointSize();
+        if (ImGui::SliderFloat("Point Size", &pointSize, 0.01f, 1.0f, "%.1f"))
+        {
+            m_renderer.setPointSize(pointSize);
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("Refresh Data"))
+        {
             fetchData();
         }
+
+        ImGui::BeginChild("MapInfo", ImVec2(220, 100), true);
+        ImGui::Text("Map View");
+        Vec2 center = m_camera.center();
+        ImGui::Text("Center: %.1f, %.1f", center.x, center.y);
+        ImGui::Text("Zoom: %.2f", m_camera.zoom());
+        if (ImGui::Button("Reset View"))
+        {
+            m_camera.reset();
+        }
+        ImGui::EndChild();
     }
     ImGui::End();
 }
@@ -271,16 +290,17 @@ void MainScreen::onPostGuiRender()
 
 void MainScreen::refreshDataIfExtentChanged()
 {
-    // Update spatial extent from camera
+    // Camera now works directly in lat/lon coordinates!
+    // No conversion needed - just read the camera bounds directly
     Vec2 center = m_camera.center();
     double zoom = m_camera.zoom();
-    double half_width = 50.0 / zoom;  // Our world is 100 units
-    double half_height = 50.0 / zoom;
+    double aspect = static_cast<double>(m_camera.width()) / static_cast<double>(m_camera.height());
 
-    m_model.spatial_extent.min_lon = -118.3 + (center.x / 100.0) * 0.1 - half_width * 0.001;
-    m_model.spatial_extent.max_lon = -118.3 + (center.x / 100.0) * 0.1 + half_width * 0.001;
-    m_model.spatial_extent.min_lat = 34.0 + (center.y / 100.0) * 0.1 - half_height * 0.001;
-    m_model.spatial_extent.max_lat = 34.0 + (center.y / 100.0) * 0.1 + half_height * 0.001;
+    // Camera bounds are already in degrees (lat/lon)
+    m_model.spatial_extent.min_lon = center.x - aspect * zoom;
+    m_model.spatial_extent.max_lon = center.x + aspect * zoom;
+    m_model.spatial_extent.min_lat = center.y - zoom;
+    m_model.spatial_extent.max_lat = center.y + zoom;
 
     // Check if extent changed significantly (more than 1%)
     bool spatial_changed =
@@ -293,7 +313,8 @@ void MainScreen::refreshDataIfExtentChanged()
         std::abs(m_model.time_extent.start - m_lastTimeExtent.start) > 100.0 ||
         std::abs(m_model.time_extent.end - m_lastTimeExtent.end) > 100.0;
 
-    if ((spatial_changed || time_changed) && !m_model.is_fetching) {
+    if ((spatial_changed || time_changed) && !m_model.is_fetching)
+    {
         m_lastSpatialExtent = m_model.spatial_extent;
         m_lastTimeExtent = m_model.time_extent;
         fetchData();
@@ -302,32 +323,35 @@ void MainScreen::refreshDataIfExtentChanged()
 
 void MainScreen::fetchData()
 {
-    if (m_model.is_fetching) return;  // Already fetching
+    if (m_model.is_fetching)
+        return; // Already fetching
 
     m_model.startFetch();
 
     // Launch async fetch
-    m_pendingFetch = std::async(std::launch::async, [this]() {
-        m_backend->fetchEntities(
-            m_model.time_extent,
-            m_model.spatial_extent,
-            [this](std::vector<Entity>&& entities) {
-                // Update model on main thread (will be read in next frame)
-                m_model.entities = std::move(entities);
-                m_model.endFetch();
-            }
-        );
-    });
+    m_pendingFetch = std::async(std::launch::async, [this]()
+                                { m_backend->fetchEntities(
+                                      m_model.time_extent,
+                                      m_model.spatial_extent,
+                                      [this](std::vector<Entity> &&entities)
+                                      {
+                                          // Update model on main thread (will be read in next frame)
+                                          m_model.entities = std::move(entities);
+                                          m_model.endFetch();
+                                      }); });
 }
 
 void MainScreen::switchBackend(BackendType type)
 {
     m_backendType = type;
 
-    if (type == BackendType::Fake) {
+    if (type == BackendType::Fake)
+    {
         std::cout << "Switching to FakeBackend" << std::endl;
         m_backend = std::make_unique<FakeBackend>(1000);
-    } else {
+    }
+    else
+    {
         std::cout << "Switching to HttpBackend: " << m_backendUrl << std::endl;
         m_backend = std::make_unique<HttpBackend>(m_backendUrl, m_entityType);
     }
