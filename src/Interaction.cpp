@@ -23,9 +23,7 @@ void InteractionController::onCursorPos(AppModel &model, Camera &camera, const V
 {
     if (m_state.mode == InteractionMode::PanningCamera)
     {
-        // Pan in world space
-        Vec2 delta = mouseWorld - m_state.mouseDownWorld;
-        camera.move(delta);
+        camera.move(mouseWorld - m_state.mouseDownWorld);
     }
 }
 

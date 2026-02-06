@@ -38,6 +38,7 @@ public:
     int totalPoints() const { return static_cast<int>(m_points.pointCount()); }
 
 private:
+    float m_pointSize = 1;
     LineRenderer m_lines{};
     PointRenderer m_points{};
 

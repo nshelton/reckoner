@@ -59,7 +59,7 @@ void Renderer::renderEntities(const Camera &camera, const AppModel &model)
 
       // Render as a bright red point (easier to see)
       Color pointColor(1.0f, 0.0f, 0.0f, 1.0f);
-      m_points.addPoint(worldPos, pointColor, 5.0f);  // Larger size
+      m_points.addPoint(worldPos, pointColor, m_pointSize);  // Larger size
       rendered_count++;
    }
 

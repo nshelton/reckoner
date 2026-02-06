@@ -28,10 +28,10 @@ void Camera::setSize(int width, int height)
 
 
 void Camera::move(Vec2 delta) {
-    m_left -= delta.x;
-    m_right -= delta.x;
-    m_bottom -= delta.y;
-    m_top -= delta.y;
+    m_left += delta.x;
+    m_right += delta.x;
+    m_bottom += delta.y;
+    m_top += delta.y;
     m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
 }
 

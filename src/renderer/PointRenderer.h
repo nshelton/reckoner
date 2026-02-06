@@ -20,7 +20,7 @@ public:
     void begin(const Mat3& viewProjection);
 
     /// Add a point to the batch (world space coordinates)
-    void addPoint(const Vec2& pos, const Color& color, float size = 5.0f);
+    void addPoint(const Vec2& pos, const Color& color, float size = 1.0f);
 
     /// Flush all points to GPU and render
     void end();
