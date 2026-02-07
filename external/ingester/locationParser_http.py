@@ -112,58 +112,111 @@ def create_location_entity(
     else:
         raise Exception(f"Failed to create entity: {response.status_code} - {response.text}")
 
-def batch_insert_locations(samples, api_key: str, batch_size: int = 100):
+def _build_entity_data(
+    timestamp: str,
+    latitude: float,
+    longitude: float,
+    name: Optional[str] = None,
+    color: str = "#FF0000",
+    source: str = "location_parser",
+    external_id: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build an entity dict for the API."""
+    iso_timestamp = parse_timestamp(timestamp)
+    return {
+        "type": "location.gps",
+        "t_start": iso_timestamp,
+        "t_end": None,
+        "lat": latitude,
+        "lon": longitude,
+        "name": name,
+        "color": color,
+        "render_offset": None,
+        "source": source,
+        "external_id": external_id,
+        "payload": payload or {},
+    }
+
+
+def batch_insert_locations(samples, api_key: str, batch_size: int = 500):
     """
-    Insert multiple location samples in batches
+    Insert multiple location samples using the batch endpoint.
 
     Args:
         samples: List of location samples from your parser
         api_key: API key for authentication
-        batch_size: Number of entities to insert before printing progress
+        batch_size: Number of entities per HTTP request (max 1000)
     """
     inserted_count = 0
     updated_count = 0
     error_count = 0
 
-    for i, sample in enumerate(samples):
-        location = sample.get('location')
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": api_key,
+    }
 
+    # Build all entity dicts first, skipping samples without location
+    entity_batch = []
+    total_samples = 0
+
+    for sample in samples:
+        location = sample.get("location")
         if location is None:
             continue
 
+        total_samples += 1
         try:
-            # Use timestamp as external_id for idempotent inserts
-            external_id = location['timestamp']
-
-            result = create_location_entity(
-                timestamp=location['timestamp'],
-                latitude=location['latitude'],
-                longitude=location['longitude'],
-                api_key=api_key,
-                external_id=external_id,
-                payload={
-                    "original_data": sample  # Store original sample data
-                }
+            entity_batch.append(
+                _build_entity_data(
+                    timestamp=location["timestamp"],
+                    latitude=location["latitude"],
+                    longitude=location["longitude"],
+                    external_id=location["timestamp"],
+                    payload={"original_data": sample},
+                )
             )
-
-            if result['status'] == 'inserted':
-                inserted_count += 1
-            else:
-                updated_count += 1
-
-            # Print progress every batch_size entities
-            if (i + 1) % batch_size == 0:
-                print(f"Processed {i + 1} samples: {inserted_count} inserted, {updated_count} updated, {error_count} errors")
-
         except Exception as e:
             error_count += 1
-            print(f"Error processing sample {i}: {e}")
+            print(f"Error building entity: {e}")
+            continue
+
+        # Send batch when full
+        if len(entity_batch) >= batch_size:
+            result = _send_batch(entity_batch, headers)
+            inserted_count += result["inserted"]
+            updated_count += result["updated"]
+            error_count += result["errors"]
+            processed = inserted_count + updated_count + error_count
+            print(f"Processed {processed}/{total_samples}: {inserted_count} inserted, {updated_count} updated, {error_count} errors")
+            entity_batch = []
+
+    # Send remaining entities
+    if entity_batch:
+        result = _send_batch(entity_batch, headers)
+        inserted_count += result["inserted"]
+        updated_count += result["updated"]
+        error_count += result["errors"]
 
     print(f"\nFinal stats:")
     print(f"  Inserted: {inserted_count}")
     print(f"  Updated: {updated_count}")
     print(f"  Errors: {error_count}")
     print(f"  Total processed: {inserted_count + updated_count}")
+
+
+def _send_batch(entities: list, headers: dict) -> Dict[str, Any]:
+    """Send a batch of entities to the batch endpoint."""
+    response = requests.post(
+        f"{BACKEND_URL}/v1/entities/batch",
+        json=entities,
+        headers=headers,
+    )
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Batch insert failed: {response.status_code} - {response.text}")
 
 # Example usage in your notebook:
 """

@@ -27,8 +27,19 @@ void MainScreen::onResize(int width, int height)
     // Don't set it here as it would override the per-window settings
 }
 
-void MainScreen::onUpdate(double /*dt*/)
+void MainScreen::onUpdate(double dt)
 {
+    // FPS tracking
+    m_frameTimeAccum += dt;
+    m_frameCount++;
+    if (m_frameTimeAccum >= 0.5)
+    {
+        m_fps = m_frameCount / m_frameTimeAccum;
+        m_frameMs = (m_frameTimeAccum / m_frameCount) * 1000.0;
+        m_frameCount = 0;
+        m_frameTimeAccum = 0.0;
+    }
+
     // Check if extent changed and trigger refresh
     refreshDataIfExtentChanged();
 }
@@ -41,6 +52,7 @@ void MainScreen::onRender()
 void MainScreen::onDetach()
 {
     m_renderer.shutdown();
+    m_timelineRenderer.shutdown();
 }
 
 void MainScreen::onFilesDropped(const std::vector<std::string> & /*paths*/)
@@ -142,29 +154,60 @@ void MainScreen::onGui()
     ImGui::Begin("Timeline");
     {
         ImVec2 contentSize = ImGui::GetContentRegionAvail();
+        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 
-        // Placeholder for timeline rendering
-        ImGui::Text("Timeline View");
-        ImGui::Separator();
-        ImGui::Text("Size: %.0f x %.0f", contentSize.x, contentSize.y);
+        ImGui::InvisibleButton("TimelineCanvas", contentSize);
 
+        if (ImGui::IsItemHovered())
+        {
+            ImGuiIO &tio = ImGui::GetIO();
+
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            {
+                m_timelineCamera.panByPixels(tio.MouseDelta.x);
+            }
+
+            if (tio.MouseWheel != 0.0f)
+            {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float localX = mousePos.x - cursorPos.x;
+                m_timelineCamera.zoomAtPixel(localX, tio.MouseWheel);
+            }
+        }
+
+        // Compute framebuffer viewport
+        int fbWidth, fbHeight;
+        glfwGetFramebufferSize(m_app->window(), &fbWidth, &fbHeight);
+        ImGuiIO &tio = ImGui::GetIO();
+        float fbScale = fbWidth / tio.DisplaySize.x;
+
+        m_timelineViewport.x = static_cast<int>(cursorPos.x * fbScale);
+        m_timelineViewport.y = static_cast<int>(
+            (tio.DisplaySize.y - cursorPos.y - contentSize.y) * fbScale);
+        m_timelineViewport.w = static_cast<int>(contentSize.x * fbScale);
+        m_timelineViewport.h = static_cast<int>(contentSize.y * fbScale);
+        m_timelineViewportValid = true;
+
+        m_timelineCamera.setSize(static_cast<int>(contentSize.x), static_cast<int>(contentSize.y));
     }
     ImGui::End();
 
     // Controls Window
     ImGui::Begin("Controls");
     {
-        ImGui::Text("Spatiotemporal Visualizer");
-        ImGui::Separator();
+        
 
-        ImGui::Text("Map Controls:");
-        ImGui::BulletText("Left drag: Pan");
-        ImGui::BulletText("Scroll: Zoom");
+        ImGui::Text("%.1f FPS  (%.2f ms)", m_fps, m_frameMs);
 
         ImGui::Separator();
-        if (ImGui::Button("Reset View"))
+        if (ImGui::Button("Reset Map"))
         {
             m_camera.reset();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Timeline"))
+        {
+            m_timelineCamera.reset();
         }
 
         ImGui::Separator();
@@ -181,6 +224,7 @@ void MainScreen::onGui()
         // HTTP backend configuration
         if (m_backendType == BackendType::Http)
         {
+
             ImGui::InputText("Backend URL", m_backendUrl, sizeof(m_backendUrl));
             ImGui::InputText("Entity Type", m_entityType, sizeof(m_entityType));
             if (ImGui::Button("Apply HTTP Config"))
@@ -247,16 +291,10 @@ void MainScreen::onGui()
             fetchData();
         }
 
-        ImGui::BeginChild("MapInfo", ImVec2(220, 100), true);
-        ImGui::Text("Map View");
-        Vec2 center = m_camera.center();
-        ImGui::Text("Center: %.1f, %.1f", center.x, center.y);
-        ImGui::Text("Zoom: %.2f", m_camera.zoom());
-        if (ImGui::Button("Reset View"))
-        {
-            m_camera.reset();
-        }
-        ImGui::EndChild();
+        ImGui::Separator();
+        ImGui::Text("Map: center (%.4f, %.4f) zoom %.4f",
+                     m_camera.center().x, m_camera.center().y, m_camera.zoom());
+        ImGui::Text("Timeline: zoom %.0fs", m_timelineCamera.zoom());
     }
     ImGui::End();
 }
@@ -286,6 +324,26 @@ void MainScreen::onPostGuiRender()
         // Reset viewport to full window
         glViewport(0, 0, fbWidth, fbHeight);
     }
+
+    if (m_timelineViewportValid)
+    {
+        int fbWidth, fbHeight;
+        glfwGetFramebufferSize(m_app->window(), &fbWidth, &fbHeight);
+
+        glViewport(m_timelineViewport.x, m_timelineViewport.y,
+                   m_timelineViewport.w, m_timelineViewport.h);
+        glScissor(m_timelineViewport.x, m_timelineViewport.y,
+                  m_timelineViewport.w, m_timelineViewport.h);
+        glEnable(GL_SCISSOR_TEST);
+
+        glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        m_timelineRenderer.render(m_timelineCamera, m_model);
+
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, fbWidth, fbHeight);
+    }
 }
 
 void MainScreen::refreshDataIfExtentChanged()
@@ -302,7 +360,11 @@ void MainScreen::refreshDataIfExtentChanged()
     m_model.spatial_extent.min_lat = center.y - zoom;
     m_model.spatial_extent.max_lat = center.y + zoom;
 
-    // Check if extent changed significantly (more than 1%)
+    // Sync time extent from timeline camera
+    TimeExtent visibleTime = m_timelineCamera.getTimeExtent();
+    m_model.time_extent = visibleTime;
+
+    // Check if extent changed significantly
     bool spatial_changed =
         std::abs(m_model.spatial_extent.min_lat - m_lastSpatialExtent.min_lat) > 0.001 ||
         std::abs(m_model.spatial_extent.max_lat - m_lastSpatialExtent.max_lat) > 0.001 ||

@@ -4,6 +4,8 @@
 #include <imgui.h>
 #include "Camera.h"
 #include "Renderer.h"
+#include "TimelineCamera.h"
+#include "TimelineRenderer.h"
 #include "AppModel.h"
 #include "Backend.h"
 #include "FakeBackend.h"
@@ -32,6 +34,8 @@ private:
     Camera m_camera{};
     Renderer m_renderer{};
     InteractionController m_interaction{};
+    TimelineCamera m_timelineCamera{};
+    TimelineRenderer m_timelineRenderer{};
     AppModel m_model{};
 
     // Backend
@@ -58,6 +62,12 @@ private:
     // Cached extents for change detection
     SpatialExtent m_lastSpatialExtent;
     TimeExtent m_lastTimeExtent;
+
+    // FPS tracking
+    double m_frameTimeAccum{0.0};
+    int m_frameCount{0};
+    double m_fps{0.0};
+    double m_frameMs{0.0};
 
     // Methods
     void refreshDataIfExtentChanged();

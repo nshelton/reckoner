@@ -80,7 +80,7 @@ void Renderer::renderEntities(const Camera &camera, const AppModel &model)
       Vec2 geoPos(*entity.lon, *entity.lat);
 
       // Render as a bright red point
-      Color pointColor(1.0f, 0.0f, 0.0f, 1.0f);
+      Color pointColor(1.0f, 0.0f, 0.0f, 0.3f);
       m_points.addPoint(geoPos, pointColor, m_pointSize);
       rendered_count++;
    }
