@@ -31,7 +31,8 @@ std::vector<Entity> BackendAPI::fetch_bbox(
             {"start", TimeUtils::to_iso8601(time_extent.start)},
             {"end", TimeUtils::to_iso8601(time_extent.end)}
         }},
-        {"limit", limit}
+        {"limit", limit},
+        {"order", "random"}  // Uniformly distributed random sampling
     };
 
     std::cout << "Fetching from " << base_url_ << "/v1/query/bbox" << std::endl;

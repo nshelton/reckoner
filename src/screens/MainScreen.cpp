@@ -10,8 +10,8 @@ void MainScreen::onAttach(App &app)
     m_app = &app;
     std::cout << "MainScreen attached" << std::endl;
 
-    // Initialize backend with 1000 points
-    m_backend = std::make_unique<FakeBackend>(1000);
+    // Initialize backend based on default type
+    switchBackend(m_backendType);
 
     // Cache initial extents
     m_lastSpatialExtent = m_model.spatial_extent;
@@ -333,10 +333,12 @@ void MainScreen::fetchData()
                                 { m_backend->fetchEntities(
                                       m_model.time_extent,
                                       m_model.spatial_extent,
-                                      [this](std::vector<Entity> &&entities)
+                                      [this](std::vector<Entity> &&fetched_entities)
                                       {
-                                          // Update model on main thread (will be read in next frame)
-                                          m_model.entities = std::move(entities);
+                                          // Push new entities into ring buffer (accumulates across queries)
+                                          for (Entity& entity : fetched_entities) {
+                                              m_model.entities.push(std::move(entity));
+                                          }
                                           m_model.endFetch();
                                       }); });
 }

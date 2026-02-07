@@ -5,7 +5,7 @@
 int main()
 {
     try {
-        App app(1280, 800, "Reckoner");
+        App app(1920, 1080, "Reckoner");
         MainScreen screen;
         app.run(screen);
     }

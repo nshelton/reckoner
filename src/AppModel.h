@@ -3,6 +3,7 @@
 #include "core/Entity.h"
 #include "core/TimeExtent.h"
 #include "core/Vec2.h"
+#include "core/RingBuffer.h"
 #include <vector>
 #include <array>
 #include <chrono>
@@ -25,51 +26,6 @@ struct SpatialExtent {
     }
 };
 
-/// Ring buffer for tracking fetch latencies
-template<size_t N>
-class LatencyRingBuffer {
-public:
-    void push(float latency_ms) {
-        m_buffer[m_index] = latency_ms;
-        m_index = (m_index + 1) % N;
-        if (m_count < N) m_count++;
-    }
-
-    float average() const {
-        if (m_count == 0) return 0.0f;
-        float sum = 0.0f;
-        for (size_t i = 0; i < m_count; ++i) {
-            sum += m_buffer[i];
-        }
-        return sum / m_count;
-    }
-
-    float min() const {
-        if (m_count == 0) return 0.0f;
-        float m = m_buffer[0];
-        for (size_t i = 1; i < m_count; ++i) {
-            if (m_buffer[i] < m) m = m_buffer[i];
-        }
-        return m;
-    }
-
-    float max() const {
-        if (m_count == 0) return 0.0f;
-        float m = m_buffer[0];
-        for (size_t i = 1; i < m_count; ++i) {
-            if (m_buffer[i] > m) m = m_buffer[i];
-        }
-        return m;
-    }
-
-    size_t count() const { return m_count; }
-
-private:
-    std::array<float, N> m_buffer{};
-    size_t m_index = 0;
-    size_t m_count = 0;
-};
-
 /// Central application state
 /// Contains entities, extents, and performance stats
 class AppModel {
@@ -77,7 +33,8 @@ public:
     SpatialExtent spatial_extent;  // Geographic bounds for map view
     TimeExtent time_extent{0.0, 1770348932};  // Default: 1970 - now
 
-    std::vector<Entity> entities;  // Entities currently loaded
+    // Entity storage - ring buffer accumulates entities from multiple queries
+    RingBuffer<Entity, 50000> entities;  // Up to 50k entities, oldest evicted when full
 
     // Stats tracking
     LatencyRingBuffer<50> fetch_latencies;  // Last 50 fetch latencies in ms
