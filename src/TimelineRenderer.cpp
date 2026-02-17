@@ -150,10 +150,12 @@ void TimelineRenderer::renderEntities(const TimelineCamera &camera, const AppMod
 
         float y = 0.0f;
         float x = static_cast<float>(entity.time_mid());
-        Color c(0.2f, 0.6f, 1.0f, 0.9f);
-        m_points.addPoint(Vec2(x, y), c, 2.0f);
+        Color c(1.0f, 1.0f, 1.0f, 0.9f);  // Alpha only; RGB from turbo colormap
+        m_points.addPoint(Vec2(x, y), c, 2.0f, static_cast<float>(entity.time_start));
         idx++;
     }
 
-    m_points.end();
+    float timeMin = static_cast<float>(visible.start);
+    float timeMax = static_cast<float>(visible.end);
+    m_points.end(timeMin, timeMax);
 }

@@ -37,7 +37,8 @@ std::vector<Entity> BackendAPI::fetch_bbox(
     const std::string& type,
     const TimeExtent& time_extent,
     const SpatialExtent& spatial_extent,
-    int limit
+    int limit,
+    const std::string& order
 ) {
     // Build request according to design doc
     // Note: API key is sent via HTTP header, not in the JSON body
@@ -54,8 +55,11 @@ std::vector<Entity> BackendAPI::fetch_bbox(
             {"end", TimeUtils::to_iso8601(time_extent.end)}
         }},
         {"limit", limit}
-        // {"order", "random"}  // Uniformly distributed random sampling
     };
+
+    if (!order.empty()) {
+        request["order"] = order;
+    }
 
     try {
         nlohmann::json response = http_client_.post(base_url_ + "/v1/query/bbox", request);
@@ -69,7 +73,8 @@ std::vector<Entity> BackendAPI::fetch_bbox(
 std::vector<Entity> BackendAPI::fetch_time(
     const std::string& type,
     const TimeExtent& time_extent,
-    int limit
+    int limit,
+    const std::string& order
 ) {
     // Build request according to design doc
     nlohmann::json request = {
@@ -78,6 +83,10 @@ std::vector<Entity> BackendAPI::fetch_time(
         {"end", TimeUtils::to_iso8601(time_extent.end)},
         {"limit", limit}
     };
+
+    if (!order.empty()) {
+        request["order"] = order;
+    }
 
     try {
         nlohmann::json response = http_client_.post(base_url_ + "/v1/query/time", request);

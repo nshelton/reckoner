@@ -80,14 +80,15 @@ void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
    size_t start = chunkIndex * PointRenderer::CHUNK_SIZE;
    size_t end = std::min(start + PointRenderer::CHUNK_SIZE, model.entities.size());
 
-   Color pointColor(1.0f, 0.0f, 0.0f, 0.3f);
+   Color pointColor(1.0f, 1.0f, 1.0f, 0.3f);  // Alpha only; RGB from turbo colormap
 
    for (size_t i = start; i < end; i++) {
       const auto& entity = model.entities[i];
       if (!entity.has_location()) continue;
 
       Vec2 geoPos(*entity.lon, *entity.lat);
-      m_chunkBuildBuf.push_back({geoPos, pointColor, m_pointSize});
+      m_chunkBuildBuf.push_back({geoPos, pointColor, m_pointSize,
+                                 static_cast<float>(entity.time_start)});
    }
 
    m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());
@@ -96,42 +97,30 @@ void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
 void Renderer::renderEntities(const Camera &camera, const AppModel &model)
 {
    size_t entityCount = model.entities.size();
-   size_t writeIdx = model.entities.writeIndex();
 
    if (entityCount == 0) return;
 
    size_t numActiveChunks = (entityCount + PointRenderer::CHUNK_SIZE - 1) / PointRenderer::CHUNK_SIZE;
 
-   // Determine which chunks are dirty
-   if (writeIdx != m_lastWriteIndex || entityCount != m_lastEntityCount) {
-      if (m_lastEntityCount == 0) {
-         // First time: rebuild all populated chunks
-         for (size_t c = 0; c < numActiveChunks; c++) {
-            rebuildChunk(c, model);
-         }
-      } else {
-         // Figure out which chunks were written to since last frame
-         size_t oldChunk = m_lastWriteIndex / PointRenderer::CHUNK_SIZE;
-         size_t newChunk = (writeIdx == 0 ? (PointRenderer::NUM_CHUNKS - 1) : (writeIdx - 1) / PointRenderer::CHUNK_SIZE);
+   // Only rebuild chunks that contain newly added entities
+   if (entityCount != m_lastEntityCount) {
+      // Ensure GPU buffers exist for all needed chunks
+      m_points.ensureChunks(numActiveChunks);
 
-         if (oldChunk == newChunk) {
-            // Writes stayed within one chunk
-            rebuildChunk(oldChunk, model);
-         } else {
-            // Writes crossed chunk boundaries — rebuild all touched chunks
-            size_t c = oldChunk;
-            while (true) {
-               rebuildChunk(c, model);
-               if (c == newChunk) break;
-               c = (c + 1) % PointRenderer::NUM_CHUNKS;
-            }
-         }
+      // If data was cleared and refilled, rebuild from scratch
+      size_t firstDirtyChunk = (entityCount > m_lastEntityCount)
+         ? m_lastEntityCount / PointRenderer::CHUNK_SIZE
+         : 0;
+
+      for (size_t c = firstDirtyChunk; c < numActiveChunks; c++) {
+         rebuildChunk(c, model);
       }
 
-      m_lastWriteIndex = writeIdx;
       m_lastEntityCount = entityCount;
    }
 
    float aspectRatio = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
-   m_points.drawChunked(camera.Transform(), aspectRatio, numActiveChunks);
+   float timeMin = static_cast<float>(model.time_extent.start);
+   float timeMax = static_cast<float>(model.time_extent.end);
+   m_points.drawChunked(camera.Transform(), aspectRatio, numActiveChunks, timeMin, timeMax);
 }

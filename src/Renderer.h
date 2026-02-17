@@ -52,8 +52,7 @@ private:
     PointRenderer m_points{};
     TileRenderer m_tiles{};
 
-    // Dirty-chunk tracking for entity ring buffer
-    size_t m_lastWriteIndex = 0;
+    // Track how many entities have been uploaded to GPU chunks
     size_t m_lastEntityCount = 0;
     std::vector<PointVertex> m_chunkBuildBuf;  // Reusable scratch buffer
 

@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include <chrono>
+#include <atomic>
 
 /// Geographic bounds for the map view
 struct SpatialExtent {
@@ -33,8 +34,12 @@ public:
     SpatialExtent spatial_extent;  // Geographic bounds for map view
     TimeExtent time_extent{0.0, 1770348932};  // Default: 1970 - now
 
-    // Entity storage - ring buffer accumulates entities from multiple queries
-    RingBuffer<Entity, 50000> entities;  // Up to 50k entities, oldest evicted when full
+    // Entity storage - all entities loaded into memory
+    std::vector<Entity> entities;
+
+    // Loading progress
+    std::atomic<size_t> total_expected{0};     // From server stats
+    std::atomic<bool> initial_load_complete{false};
 
     // Stats tracking
     LatencyRingBuffer<50> fetch_latencies;  // Last 50 fetch latencies in ms

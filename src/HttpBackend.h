@@ -3,6 +3,8 @@
 #include "Backend.h"
 #include "http/BackendAPI.h"
 #include <memory>
+#include <atomic>
+#include <functional>
 
 /// Real HTTP backend that fetches entities from the API server
 class HttpBackend : public Backend {
@@ -20,6 +22,17 @@ public:
         std::function<void(std::vector<Entity>&&)> callback
     ) override;
 
+    /// Fetch all entities via paginated requests, calling batch_callback with each chunk.
+    /// Blocks until all pages are fetched or cancelled.
+    void fetchAllEntities(
+        const TimeExtent& time,
+        const SpatialExtent& space,
+        std::function<void(std::vector<Entity>&&)> batch_callback
+    );
+
+    /// Cancel an in-progress fetchAllEntities loop
+    void cancelFetch() { m_cancelled.store(true); }
+
     /// Fetch server statistics from /stats endpoint
     ServerStats fetchStats() { return m_api->fetch_stats(); }
 
@@ -32,4 +45,5 @@ public:
 private:
     std::unique_ptr<BackendAPI> m_api;
     std::string m_entityType;
+    std::atomic<bool> m_cancelled{false};
 };

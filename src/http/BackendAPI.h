@@ -35,7 +35,8 @@ public:
         const std::string& type,
         const TimeExtent& time_extent,
         const SpatialExtent& spatial_extent,
-        int limit = 5000
+        int limit = 5000,
+        const std::string& order = ""
     );
 
     /// Fetch entities via temporal-only query
@@ -46,7 +47,8 @@ public:
     std::vector<Entity> fetch_time(
         const std::string& type,
         const TimeExtent& time_extent,
-        int limit = 2000
+        int limit = 2000,
+        const std::string& order = ""
     );
 
 private:

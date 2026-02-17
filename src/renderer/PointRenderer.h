@@ -14,44 +14,50 @@ struct PointVertex {
     Vec2 position;
     Color color;
     float size;
+    float timestamp;  // Unix epoch seconds, used for turbo colormap
 };
 
 /// GPU-accelerated point renderer using instanced rendering.
 ///
 /// Supports two modes:
-/// 1. Chunked mode: a ring buffer of GPU VBOs, upload each chunk once.
+/// 1. Chunked mode: dynamically allocated GPU VBOs, upload each chunk once.
 ///    Use updateChunk() + drawChunked().
 /// 2. Streaming mode: rebuild every frame via begin/addPoint/end.
 ///    Used when the visible set changes each frame (e.g. timeline).
 class PointRenderer {
 public:
-    static constexpr size_t CHUNK_SIZE = 5000;
-    static constexpr size_t NUM_CHUNKS = 10;
+    static constexpr size_t CHUNK_SIZE = 50000;
 
     PointRenderer();
     ~PointRenderer();
 
     // --- Chunked mode (map renderer) ---
+    /// Ensure at least numChunks GPU buffers are allocated
+    void ensureChunks(size_t numChunks);
     void updateChunk(size_t chunkIndex, const PointVertex* data, size_t count);
-    void drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks);
+    void drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks,
+                     float timeMin = 0.0f, float timeMax = 1.0f);
 
     // --- Streaming mode (timeline renderer) ---
     void begin(const Mat3& viewProjection, float aspectRatio);
-    void addPoint(const Vec2& pos, const Color& color, float size = 1.0f);
-    void end();
+    void addPoint(const Vec2& pos, const Color& color, float size = 1.0f, float timestamp = 0.0f);
+    void end(float timeMin = 0.0f, float timeMax = 0.0f);
 
     /// Total points across all chunked buffers
     size_t pointCount() const;
+
+    /// Number of allocated chunks
+    size_t numChunks() const { return m_chunkVaos.size(); }
 
 private:
     // Shared
     GLuint m_quadVbo = 0;
     GLuint m_shader = 0;
 
-    // Chunked mode state
-    GLuint m_chunkVaos[NUM_CHUNKS] = {};
-    GLuint m_chunkVbos[NUM_CHUNKS] = {};
-    size_t m_chunkPointCounts[NUM_CHUNKS] = {};
+    // Chunked mode state (dynamically sized)
+    std::vector<GLuint> m_chunkVaos;
+    std::vector<GLuint> m_chunkVbos;
+    std::vector<size_t> m_chunkPointCounts;
 
     // Streaming mode state
     GLuint m_streamVao = 0;
@@ -64,4 +70,5 @@ private:
     void initBuffers();
     void cleanup();
     void setupInstanceAttribs(GLuint vbo);
+    void allocateChunk();  // Allocate one new chunk VAO/VBO
 };

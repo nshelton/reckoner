@@ -103,6 +103,8 @@ nlohmann::json HttpClient::post(const std::string& url, const nlohmann::json& js
     curl_easy_cleanup(curl);
 
     if (http_code < 200 || http_code >= 300) {
+        std::cerr << "HTTP " << http_code << " response: " << response_string << std::endl;
+        std::cerr << "Request body: " << request_body << std::endl;
         throw std::runtime_error("HTTP request failed with code " + std::to_string(http_code));
     }
 

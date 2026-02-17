@@ -12,7 +12,7 @@ struct Layer {
     std::string name;  // entity type string, e.g. "location.gps"
     bool visible = true;
     Color color{1.0f, 0.0f, 0.0f, 0.3f};
-    RingBuffer<Entity, 10000> entities;
+    RingBuffer<Entity, 50000> entities;
 
     // Per-layer fetch state
     bool is_fetching = false;

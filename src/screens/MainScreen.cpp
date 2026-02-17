@@ -11,13 +11,6 @@ void MainScreen::onAttach(App &app)
 
     // Initialize backend based on default type
     switchBackend(m_backendType);
-
-    // Cache initial extents
-    m_lastSpatialExtent = m_model.spatial_extent;
-    m_lastTimeExtent = m_model.time_extent;
-
-    // Do initial fetch
-    fetchData();
 }
 
 void MainScreen::onResize(int width, int height)
@@ -39,8 +32,11 @@ void MainScreen::onUpdate(double dt)
         m_frameTimeAccum = 0.0;
     }
 
-    // Check if extent changed and trigger refresh
-    refreshDataIfExtentChanged();
+    // Update spatial extent from camera (for rendering, not fetching)
+    updateSpatialExtent();
+
+    // Drain completed entity batches from background thread
+    drainCompletedBatches();
 }
 
 void MainScreen::onRender()
@@ -50,6 +46,13 @@ void MainScreen::onRender()
 
 void MainScreen::onDetach()
 {
+    // Cancel any in-progress fetch
+    if (m_backendType == BackendType::Http) {
+        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
+        if (httpBackend) httpBackend->cancelFetch();
+    }
+    if (m_pendingFetch.valid()) m_pendingFetch.wait();
+
     m_renderer.shutdown();
     m_timelineRenderer.shutdown();
 }
@@ -194,7 +197,7 @@ void MainScreen::onGui()
     // Controls Window
     ImGui::Begin("Controls");
     {
-        
+
 
         ImGui::Text("%.1f FPS  (%.2f ms)", m_fps, m_frameMs);
 
@@ -234,10 +237,10 @@ void MainScreen::onGui()
 
         ImGui::Separator();
         ImGui::Text("View Extent:");
-        ImGui::Text("Lon: %.6f° to %.6f°",
+        ImGui::Text("Lon: %.6f to %.6f",
             m_model.spatial_extent.min_lon,
             m_model.spatial_extent.max_lon);
-        ImGui::Text("Lat: %.6f° to %.6f°",
+        ImGui::Text("Lat: %.6f to %.6f",
             m_model.spatial_extent.min_lat,
             m_model.spatial_extent.max_lat);
 
@@ -260,19 +263,32 @@ void MainScreen::onGui()
             ImGui::TextDisabled("No stats available");
         }
 
+        // Loading progress
         ImGui::Separator();
-        ImGui::Text("Local:");
-        ImGui::Text("Loaded entities: %zu", m_model.entities.size());
-        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
+        size_t loaded = m_model.entities.size();
+        size_t total = m_model.total_expected.load();
 
         if (m_model.is_fetching)
         {
-            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Fetching...");
+            if (total > 0) {
+                float progress = static_cast<float>(loaded) / static_cast<float>(total);
+                ImGui::ProgressBar(progress, ImVec2(-1, 0));
+                ImGui::Text("Loading: %zu / %zu entities", loaded, total);
+            } else {
+                ImGui::ProgressBar(0.0f, ImVec2(-1, 0));
+                ImGui::Text("Loading: %zu entities...", loaded);
+            }
+        }
+        else if (m_model.initial_load_complete.load())
+        {
+            ImGui::Text("Loaded: %zu entities", loaded);
         }
         else
         {
-            ImGui::Text("Status: Ready");
+            ImGui::Text("Entities: %zu", loaded);
         }
+
+        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
 
         // Latency ring buffer stats
         if (m_model.fetch_latencies.count() > 0)
@@ -298,9 +314,9 @@ void MainScreen::onGui()
         }
 
         ImGui::Separator();
-        if (ImGui::Button("Refresh Data"))
+        if (ImGui::Button("Reload All Data"))
         {
-            fetchData();
+            startFullLoad();
         }
 
         ImGui::Separator();
@@ -358,15 +374,13 @@ void MainScreen::onPostGuiRender()
     }
 }
 
-void MainScreen::refreshDataIfExtentChanged()
+void MainScreen::updateSpatialExtent()
 {
     // Camera now works directly in lat/lon coordinates!
-    // No conversion needed - just read the camera bounds directly
     Vec2 center = m_camera.center();
     double zoom = m_camera.zoom();
     double aspect = static_cast<double>(m_camera.width()) / static_cast<double>(m_camera.height());
 
-    // Camera bounds are already in degrees (lat/lon)
     m_model.spatial_extent.min_lon = center.x - aspect * zoom;
     m_model.spatial_extent.max_lon = center.x + aspect * zoom;
     m_model.spatial_extent.min_lat = center.y - zoom;
@@ -375,46 +389,73 @@ void MainScreen::refreshDataIfExtentChanged()
     // Sync time extent from timeline camera
     TimeExtent visibleTime = m_timelineCamera.getTimeExtent();
     m_model.time_extent = visibleTime;
+}
 
-    // Check if extent changed significantly
-    bool spatial_changed =
-        std::abs(m_model.spatial_extent.min_lat - m_lastSpatialExtent.min_lat) > 0.001 ||
-        std::abs(m_model.spatial_extent.max_lat - m_lastSpatialExtent.max_lat) > 0.001 ||
-        std::abs(m_model.spatial_extent.min_lon - m_lastSpatialExtent.min_lon) > 0.001 ||
-        std::abs(m_model.spatial_extent.max_lon - m_lastSpatialExtent.max_lon) > 0.001;
-
-    bool time_changed =
-        std::abs(m_model.time_extent.start - m_lastTimeExtent.start) > 100.0 ||
-        std::abs(m_model.time_extent.end - m_lastTimeExtent.end) > 100.0;
-
-    if ((spatial_changed || time_changed) && !m_model.is_fetching)
+void MainScreen::drainCompletedBatches()
+{
+    std::deque<std::vector<Entity>> batches;
     {
-        m_lastSpatialExtent = m_model.spatial_extent;
-        m_lastTimeExtent = m_model.time_extent;
-        fetchData();
+        std::lock_guard<std::mutex> lock(m_batchMutex);
+        batches.swap(m_completedBatches);
+    }
+
+    for (auto& batch : batches) {
+        m_model.entities.reserve(m_model.entities.size() + batch.size());
+        for (auto& entity : batch) {
+            m_model.entities.push_back(std::move(entity));
+        }
     }
 }
 
-void MainScreen::fetchData()
+void MainScreen::startFullLoad()
 {
-    if (m_model.is_fetching)
-        return; // Already fetching
+    // Cancel any in-progress fetch
+    if (m_backendType == BackendType::Http) {
+        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
+        if (httpBackend) httpBackend->cancelFetch();
+    }
+    if (m_pendingFetch.valid()) m_pendingFetch.wait();
 
+    // Clear existing data
+    m_model.entities.clear();
+    m_model.initial_load_complete.store(false);
+    m_model.is_fetching = true;
     m_model.startFetch();
 
-    // Launch async fetch
-    m_pendingFetch = std::async(std::launch::async, [this]()
-                                { m_backend->fetchEntities(
-                                      m_model.time_extent,
-                                      m_model.spatial_extent,
-                                      [this](std::vector<Entity> &&fetched_entities)
-                                      {
-                                          // Push new entities into ring buffer (accumulates across queries)
-                                          for (Entity& entity : fetched_entities) {
-                                              m_model.entities.push(std::move(entity));
-                                          }
-                                          m_model.endFetch();
-                                      }); });
+    // Use full time range for loading everything
+    TimeExtent fullTime = m_model.time_extent;
+    // Use a huge spatial extent to get everything
+    SpatialExtent fullSpace;
+    fullSpace.min_lat = -90.0;
+    fullSpace.max_lat = 90.0;
+    fullSpace.min_lon = -180.0;
+    fullSpace.max_lon = 180.0;
+
+    if (m_backendType == BackendType::Http) {
+        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
+        if (!httpBackend) return;
+
+        m_pendingFetch = std::async(std::launch::async, [this, httpBackend, fullTime, fullSpace]() {
+            httpBackend->fetchAllEntities(fullTime, fullSpace,
+                [this](std::vector<Entity>&& batch) {
+                    std::lock_guard<std::mutex> lock(m_batchMutex);
+                    m_completedBatches.push_back(std::move(batch));
+                });
+            m_model.endFetch();
+            m_model.initial_load_complete.store(true);
+        });
+    } else {
+        // Fake backend: single fetch
+        m_pendingFetch = std::async(std::launch::async, [this, fullTime, fullSpace]() {
+            m_backend->fetchEntities(fullTime, fullSpace,
+                [this](std::vector<Entity>&& batch) {
+                    std::lock_guard<std::mutex> lock(m_batchMutex);
+                    m_completedBatches.push_back(std::move(batch));
+                });
+            m_model.endFetch();
+            m_model.initial_load_complete.store(true);
+        });
+    }
 }
 
 void MainScreen::fetchServerStats()
@@ -425,12 +466,20 @@ void MainScreen::fetchServerStats()
         if (httpBackend) {
             m_serverStats = httpBackend->fetchStats();
             m_hasServerStats = true;
+            m_model.total_expected.store(static_cast<size_t>(m_serverStats.total_entities));
         }
     }
 }
 
 void MainScreen::switchBackend(BackendType type)
 {
+    // Cancel any in-progress fetch
+    if (m_backendType == BackendType::Http && m_backend) {
+        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
+        if (httpBackend) httpBackend->cancelFetch();
+    }
+    if (m_pendingFetch.valid()) m_pendingFetch.wait();
+
     m_backendType = type;
 
     if (type == BackendType::Fake)
@@ -444,6 +493,6 @@ void MainScreen::switchBackend(BackendType type)
         fetchServerStats();
     }
 
-    // Trigger immediate fetch with new backend
-    fetchData();
+    // Start loading all data
+    startFullLoad();
 }

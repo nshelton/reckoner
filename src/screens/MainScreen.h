@@ -13,6 +13,8 @@
 #include <memory>
 #include <future>
 #include <string>
+#include <mutex>
+#include <deque>
 
 class MainScreen : public IScreen
 {
@@ -42,6 +44,10 @@ private:
     std::unique_ptr<Backend> m_backend;
     std::future<void> m_pendingFetch;
 
+    // Thread-safe batch delivery (background thread → main thread)
+    std::mutex m_batchMutex;
+    std::deque<std::vector<Entity>> m_completedBatches;
+
     // Backend configuration
     enum class BackendType { Fake, Http };
     BackendType m_backendType = BackendType::Http;
@@ -59,10 +65,6 @@ private:
     bool m_mapViewportValid{false};
     bool m_timelineViewportValid{false};
 
-    // Cached extents for change detection
-    SpatialExtent m_lastSpatialExtent;
-    TimeExtent m_lastTimeExtent;
-
     // FPS tracking
     double m_frameTimeAccum{0.0};
     int m_frameCount{0};
@@ -74,8 +76,9 @@ private:
     bool m_hasServerStats{false};
 
     // Methods
-    void refreshDataIfExtentChanged();
-    void fetchData();
+    void updateSpatialExtent();
+    void startFullLoad();
+    void drainCompletedBatches();
     void fetchServerStats();
     void switchBackend(BackendType type);
 };
