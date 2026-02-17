@@ -7,8 +7,8 @@
 /// Real HTTP backend that fetches entities from the API server
 class HttpBackend : public Backend {
 public:
-    /// Create HTTP backend with base URL (e.g., "http://localhost:8000")
-    /// Automatically loads API key from external/spatiotemporal_db/.env
+    /// Create HTTP backend with base URL (e.g., "http://n3k0.local:8000")
+    /// Automatically loads API key from .env
     explicit HttpBackend(const std::string& base_url, const std::string& entity_type = "location.gps");
 
     /// Create HTTP backend with explicit API key
@@ -19,6 +19,9 @@ public:
         const SpatialExtent& space,
         std::function<void(std::vector<Entity>&&)> callback
     ) override;
+
+    /// Fetch server statistics from /stats endpoint
+    ServerStats fetchStats() { return m_api->fetch_stats(); }
 
     /// Set the entity type to fetch (e.g., "location.gps", "photo")
     void setEntityType(const std::string& type) { m_entityType = type; }

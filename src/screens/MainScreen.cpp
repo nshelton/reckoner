@@ -8,7 +8,6 @@
 void MainScreen::onAttach(App &app)
 {
     m_app = &app;
-    std::cout << "MainScreen attached" << std::endl;
 
     // Initialize backend based on default type
     switchBackend(m_backendType);
@@ -243,19 +242,28 @@ void MainScreen::onGui()
             m_model.spatial_extent.max_lat);
 
         ImGui::Separator();
-        ImGui::Text("Backend Stats:");
-        ImGui::Text("Entities: %zu", m_model.entities.size());
-        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
-
-        // Debug: show first entity location
-        if (!m_model.entities.empty() && m_model.entities[0].has_location())
+        ImGui::Text("Server Stats:");
+        if (m_hasServerStats)
         {
-            ImGui::Separator();
-            auto &e = m_model.entities[0];
-            ImGui::Text("First entity:");
-            ImGui::Text("  Lon: %.6f°", *e.lon);
-            ImGui::Text("  Lat: %.6f°", *e.lat);
+            ImGui::Text("Total entities: %d", m_serverStats.total_entities);
+            for (const auto& [type, count] : m_serverStats.entities_by_type) {
+                ImGui::Text("  %s: %d", type.c_str(), count);
+            }
+            if (!m_serverStats.oldest_time.empty()) {
+                ImGui::Text("Coverage: %s", m_serverStats.oldest_time.substr(0, 10).c_str());
+                ImGui::Text("      to: %s", m_serverStats.newest_time.substr(0, 10).c_str());
+            }
+            ImGui::Text("DB size: %.1f MB", m_serverStats.db_size_mb);
         }
+        else
+        {
+            ImGui::TextDisabled("No stats available");
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Local:");
+        ImGui::Text("Loaded entities: %zu", m_model.entities.size());
+        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
 
         if (m_model.is_fetching)
         {
@@ -279,6 +287,10 @@ void MainScreen::onGui()
 
         ImGui::Separator();
         ImGui::Text("Rendering:");
+        bool tilesEnabled = m_renderer.tilesEnabled();
+        if (ImGui::Checkbox("Show Map Tiles", &tilesEnabled)) {
+            m_renderer.setTilesEnabled(tilesEnabled);
+        }
         float pointSize = m_renderer.pointSize();
         if (ImGui::SliderFloat("Point Size", &pointSize, 0.01f, 1.0f, "%.1f"))
         {
@@ -405,19 +417,31 @@ void MainScreen::fetchData()
                                       }); });
 }
 
+void MainScreen::fetchServerStats()
+{
+    m_hasServerStats = false;
+    if (m_backendType == BackendType::Http) {
+        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
+        if (httpBackend) {
+            m_serverStats = httpBackend->fetchStats();
+            m_hasServerStats = true;
+        }
+    }
+}
+
 void MainScreen::switchBackend(BackendType type)
 {
     m_backendType = type;
 
     if (type == BackendType::Fake)
     {
-        std::cout << "Switching to FakeBackend" << std::endl;
         m_backend = std::make_unique<FakeBackend>(1000);
+        m_hasServerStats = false;
     }
     else
     {
-        std::cout << "Switching to HttpBackend: " << m_backendUrl << std::endl;
         m_backend = std::make_unique<HttpBackend>(m_backendUrl, m_entityType);
+        fetchServerStats();
     }
 
     // Trigger immediate fetch with new backend

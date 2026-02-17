@@ -6,9 +6,31 @@ BackendAPI::BackendAPI(const std::string& base_url, const std::string& api_key)
     : base_url_(base_url)
     , http_client_(api_key)
 {
-    if (!api_key.empty()) {
-        std::cout << "BackendAPI: Using API key authentication" << std::endl;
+}
+
+ServerStats BackendAPI::fetch_stats() {
+    ServerStats stats;
+    try {
+        nlohmann::json response = http_client_.get(base_url_ + "/stats");
+
+        stats.total_entities = response.value("total_entities", 0);
+        stats.db_size_mb = response.value("database", nlohmann::json::object()).value("size_mb", 0.0);
+        stats.uptime_seconds = response.value("uptime_seconds", 0.0);
+
+        auto time_cov = response.value("time_coverage", nlohmann::json::object());
+        if (!time_cov["oldest"].is_null()) stats.oldest_time = time_cov["oldest"].get<std::string>();
+        if (!time_cov["newest"].is_null()) stats.newest_time = time_cov["newest"].get<std::string>();
+
+        for (const auto& entry : response.value("entities_by_type", nlohmann::json::array())) {
+            stats.entities_by_type.emplace_back(
+                entry["type"].get<std::string>(),
+                entry["count"].get<int>()
+            );
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to fetch stats: " << e.what() << std::endl;
     }
+    return stats;
 }
 
 std::vector<Entity> BackendAPI::fetch_bbox(
@@ -35,14 +57,11 @@ std::vector<Entity> BackendAPI::fetch_bbox(
         {"order", "random"}  // Uniformly distributed random sampling
     };
 
-    std::cout << "Fetching from " << base_url_ << "/v1/query/bbox" << std::endl;
-    std::cout << "Request: " << request.dump(2) << std::endl;
-
     try {
         nlohmann::json response = http_client_.post(base_url_ + "/v1/query/bbox", request);
         return parse_entities(response["entities"]);
     } catch (const std::exception& e) {
-        std::cerr << "Backend fetch failed: " << e.what() << std::endl;
+        std::cerr << "Backend fetch_bbox failed: " << e.what() << std::endl;
         return {};
     }
 }
@@ -57,18 +76,14 @@ std::vector<Entity> BackendAPI::fetch_time(
         {"types", nlohmann::json::array({type})},
         {"start", TimeUtils::to_iso8601(time_extent.start)},
         {"end", TimeUtils::to_iso8601(time_extent.end)},
-        {"limit", limit},
-        {"resample", {{"method", "none"}}}
+        {"limit", limit}
     };
-
-    std::cout << "Fetching from " << base_url_ << "/v1/query/time" << std::endl;
-    std::cout << "Request: " << request.dump(2) << std::endl;
 
     try {
         nlohmann::json response = http_client_.post(base_url_ + "/v1/query/time", request);
         return parse_entities(response["entities"]);
     } catch (const std::exception& e) {
-        std::cerr << "Backend fetch failed: " << e.what() << std::endl;
+        std::cerr << "Backend fetch_time failed: " << e.what() << std::endl;
         return {};
     }
 }
@@ -109,6 +124,5 @@ std::vector<Entity> BackendAPI::parse_entities(const nlohmann::json& json_array)
         result.push_back(std::move(e));
     }
 
-    std::cout << "Parsed " << result.size() << " entities" << std::endl;
     return result;
 }

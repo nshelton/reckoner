@@ -45,7 +45,6 @@ std::unordered_map<std::string, std::string> EnvLoader::load(const std::string& 
         env[key] = value;
     }
 
-    std::cout << "Loaded " << env.size() << " environment variables from " << filepath << std::endl;
     return env;
 }
 

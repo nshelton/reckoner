@@ -7,11 +7,18 @@
 Renderer::Renderer()
 {
    m_lines.init();
+   m_tiles.init();
 }
 
 void Renderer::render(const Camera &camera, const AppModel &model, const InteractionState &uiState)
 {
    m_lines.clear();
+
+   // Vector tile lines (drawn first as background layer)
+   if (m_tilesEnabled) {
+      m_tiles.render(camera, m_lines);
+   }
+
    renderGrid(camera, model);
    m_lines.draw(camera.Transform());
 
@@ -22,6 +29,7 @@ void Renderer::render(const Camera &camera, const AppModel &model, const Interac
 void Renderer::shutdown()
 {
    m_lines.shutdown();
+   m_tiles.shutdown();
 }
 
 void Renderer::renderGrid(const Camera &camera, const AppModel &model)

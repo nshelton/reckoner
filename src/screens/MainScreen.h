@@ -45,7 +45,7 @@ private:
     // Backend configuration
     enum class BackendType { Fake, Http };
     BackendType m_backendType = BackendType::Http;
-    char m_backendUrl[256] = "http://localhost:8000";
+    char m_backendUrl[256] = "http://n3k0.local:8000";
     char m_entityType[128] = "location.gps";
 
     // Cached window sizes
@@ -69,8 +69,13 @@ private:
     double m_fps{0.0};
     double m_frameMs{0.0};
 
+    // Server stats
+    ServerStats m_serverStats;
+    bool m_hasServerStats{false};
+
     // Methods
     void refreshDataIfExtentChanged();
     void fetchData();
+    void fetchServerStats();
     void switchBackend(BackendType type);
 };

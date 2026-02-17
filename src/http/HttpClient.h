@@ -16,6 +16,12 @@ public:
     /// Get the current API key
     const std::string& apiKey() const { return m_apiKey; }
 
+    /// Make a GET request
+    /// @param url Full URL to GET
+    /// @return JSON response object
+    /// @throws std::runtime_error on HTTP errors
+    nlohmann::json get(const std::string& url);
+
     /// Make a POST request with JSON body
     /// @param url Full URL to POST to
     /// @param json_body JSON object to send as request body

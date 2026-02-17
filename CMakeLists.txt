@@ -42,7 +42,7 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
 add_executable(reckoner ${SRC_FILES})
 
 # Include directories
-target_include_directories(reckoner PRIVATE src)
+target_include_directories(reckoner PRIVATE src external/stb)
 
 # Link libraries
 target_link_libraries(reckoner PRIVATE

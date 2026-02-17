@@ -10,6 +10,44 @@ size_t HttpClient::write_callback(void* contents, size_t size, size_t nmemb, voi
     return total_size;
 }
 
+nlohmann::json HttpClient::get(const std::string& url) {
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        throw std::runtime_error("Failed to initialize CURL");
+    }
+
+    std::string response_string;
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK) {
+        std::string error_msg = "CURL request failed: ";
+        error_msg += curl_easy_strerror(res);
+        curl_easy_cleanup(curl);
+        throw std::runtime_error(error_msg);
+    }
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+
+    if (http_code < 200 || http_code >= 300) {
+        throw std::runtime_error("HTTP request failed with code " + std::to_string(http_code));
+    }
+
+    try {
+        return nlohmann::json::parse(response_string);
+    } catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error(std::string("Failed to parse JSON response: ") + e.what());
+    }
+}
+
 nlohmann::json HttpClient::post(const std::string& url, const nlohmann::json& json_body) {
     CURL* curl = curl_easy_init();
     if (!curl) {

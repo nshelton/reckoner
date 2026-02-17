@@ -5,6 +5,7 @@
 #include "core/Color.h"
 #include "renderer/LineRenderer.h"
 #include "renderer/PointRenderer.h"
+#include "tiles/TileRenderer.h"
 #include "Interaction.h"
 #include "AppModel.h"
 #include "Camera.h"
@@ -36,14 +37,19 @@ public:
     void setPointSize(float size) { m_pointSize = size; }
     float pointSize() const { return m_pointSize; }
 
+    void setTilesEnabled(bool enabled) { m_tilesEnabled = enabled; }
+    bool tilesEnabled() const { return m_tilesEnabled; }
+
     // Debug/stats
     int totalVertices() const { return static_cast<int>(m_lines.totalVertices()); }
     int totalPoints() const { return static_cast<int>(m_points.pointCount()); }
 
 private:
     float m_pointSize = 0.4;
+    bool m_tilesEnabled = true;
     LineRenderer m_lines{};
     PointRenderer m_points{};
+    TileRenderer m_tiles{};
 
     void renderGrid(const Camera &camera, const AppModel &model);
     void renderEntities(const Camera &camera, const AppModel &model);

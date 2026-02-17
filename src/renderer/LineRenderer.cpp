@@ -147,9 +147,14 @@ void LineRenderer::draw( const Mat3 &mm_to_ndc)
             static_cast<GLsizeiptr>(m_vertices.size() * sizeof(GLVertex)),
             m_vertices.data(), GL_DYNAMIC_DRAW);
 
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
         if (m_lineWidth > 0.0f)
             glLineWidth(m_lineWidth);
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(m_vertices.size()));
+
+        glDisable(GL_BLEND);
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
