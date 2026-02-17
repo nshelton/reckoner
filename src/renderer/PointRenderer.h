@@ -9,43 +9,59 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
-/// GPU-accelerated point renderer using instanced rendering
-/// Efficiently renders thousands of points with a single draw call
+/// Vertex data for a single point instance
+struct PointVertex {
+    Vec2 position;
+    Color color;
+    float size;
+};
+
+/// GPU-accelerated point renderer using instanced rendering.
+///
+/// Supports two modes:
+/// 1. Chunked mode: a ring buffer of GPU VBOs, upload each chunk once.
+///    Use updateChunk() + drawChunked().
+/// 2. Streaming mode: rebuild every frame via begin/addPoint/end.
+///    Used when the visible set changes each frame (e.g. timeline).
 class PointRenderer {
 public:
+    static constexpr size_t CHUNK_SIZE = 5000;
+    static constexpr size_t NUM_CHUNKS = 10;
+
     PointRenderer();
     ~PointRenderer();
 
-    /// Begin a new frame of point rendering
+    // --- Chunked mode (map renderer) ---
+    void updateChunk(size_t chunkIndex, const PointVertex* data, size_t count);
+    void drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks);
+
+    // --- Streaming mode (timeline renderer) ---
     void begin(const Mat3& viewProjection, float aspectRatio);
-
-    /// Add a point to the batch (world space coordinates)
     void addPoint(const Vec2& pos, const Color& color, float size = 1.0f);
-
-    /// Flush all points to GPU and render
     void end();
 
-    /// Stats
-    size_t pointCount() const { return m_points.size(); }
+    /// Total points across all chunked buffers
+    size_t pointCount() const;
 
 private:
-    struct PointVertex {
-        Vec2 position;
-        Color color;
-        float size;
-    };
+    // Shared
+    GLuint m_quadVbo = 0;
+    GLuint m_shader = 0;
 
-    std::vector<PointVertex> m_points;
+    // Chunked mode state
+    GLuint m_chunkVaos[NUM_CHUNKS] = {};
+    GLuint m_chunkVbos[NUM_CHUNKS] = {};
+    size_t m_chunkPointCounts[NUM_CHUNKS] = {};
+
+    // Streaming mode state
+    GLuint m_streamVao = 0;
+    GLuint m_streamVbo = 0;
+    std::vector<PointVertex> m_streamPoints;
     Mat3 m_viewProjection;
     float m_aspectRatio = 1.0f;
-
-    // OpenGL resources
-    GLuint m_vao = 0;
-    GLuint m_quadVbo = 0;      // Static quad vertices
-    GLuint m_instanceVbo = 0;  // Dynamic instance data
-    GLuint m_shader = 0;
 
     void initShaders();
     void initBuffers();
     void cleanup();
+    void setupInstanceAttribs(GLuint vbo);
 };

@@ -8,6 +8,8 @@
 #include <deque>
 #include <cstdint>
 
+typedef void CURL;
+
 struct TileKey {
     int z, x, y;
     bool operator==(const TileKey& o) const { return z == o.z && x == o.x && y == o.y; }
@@ -29,7 +31,7 @@ struct TileEntry {
 
 class TileCache {
 public:
-    TileCache() = default;
+    TileCache();
     ~TileCache();
 
     /// Process completed async fetches (call each frame from main thread)
@@ -58,7 +60,16 @@ private:
     std::mutex m_resultMutex;
     std::deque<FetchResult> m_completedFetches;
     std::vector<std::future<void>> m_inFlight;
+    std::deque<TileKey> m_pendingQueue;
+
+    // Pool of reusable CURL handles — each keeps its TCP+TLS connection alive
+    std::mutex m_curlPoolMutex;
+    std::vector<CURL*> m_curlPool;
+    static constexpr int MaxConcurrentFetches = 10;
 
     void fetchTileAsync(const TileKey& key);
-    static FetchResult downloadAndDecode(const TileKey& key);
+    void drainPendingQueue();
+    FetchResult downloadAndDecode(const TileKey& key);
+    CURL* acquireCurl();
+    void releaseCurl(CURL* curl);
 };

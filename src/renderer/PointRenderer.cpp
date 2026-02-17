@@ -79,51 +79,6 @@ PointRenderer::PointRenderer() {
     initBuffers();
 }
 
-void PointRenderer::initBuffers() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_quadVbo);
-    glGenBuffers(1, &m_instanceVbo);
-
-    // Quad vertices (triangle strip order: BL, BR, TL, TR)
-    float quadVertices[] = {
-        -1.0f, -1.0f,  // bottom-left
-         1.0f, -1.0f,  // bottom-right
-        -1.0f,  1.0f,  // top-left
-         1.0f,  1.0f   // top-right
-    };
-
-    glBindVertexArray(m_vao);
-
-    // Upload static quad vertices
-    glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
-    // Attribute 0: quad vertex (per-vertex, not per-instance)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glVertexAttribDivisor(0, 0);  // 0 = per vertex
-
-    // Set up instance buffer (will be filled in end())
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceVbo);
-
-    // Attribute 1: position (per-instance)
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, position));
-    glVertexAttribDivisor(1, 1);
-
-    // Attribute 2: color (per-instance)
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, color));
-    glVertexAttribDivisor(2, 1);
-
-    // Attribute 3: size (per-instance)
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, size));
-    glVertexAttribDivisor(3, 1);
-
-    glBindVertexArray(0);
-}
-
 PointRenderer::~PointRenderer() {
     cleanup();
 }
@@ -149,56 +104,165 @@ void PointRenderer::initShaders() {
     glDeleteShader(fs);
 }
 
+void PointRenderer::setupInstanceAttribs(GLuint vbo) {
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+    // Attribute 1: position (per-instance)
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, position));
+    glVertexAttribDivisor(1, 1);
+
+    // Attribute 2: color (per-instance)
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, color));
+    glVertexAttribDivisor(2, 1);
+
+    // Attribute 3: size (per-instance)
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(PointVertex), (void*)offsetof(PointVertex, size));
+    glVertexAttribDivisor(3, 1);
+}
+
+void PointRenderer::initBuffers() {
+    // Quad vertices shared by all VAOs (triangle strip: BL, BR, TL, TR)
+    float quadVertices[] = {
+        -1.0f, -1.0f,
+         1.0f, -1.0f,
+        -1.0f,  1.0f,
+         1.0f,  1.0f
+    };
+
+    glGenBuffers(1, &m_quadVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+
+    // --- Chunked mode: per-chunk VBOs and VAOs ---
+    glGenBuffers(NUM_CHUNKS, m_chunkVbos);
+    glGenVertexArrays(NUM_CHUNKS, m_chunkVaos);
+
+    for (size_t i = 0; i < NUM_CHUNKS; i++) {
+        glBindBuffer(GL_ARRAY_BUFFER, m_chunkVbos[i]);
+        glBufferData(GL_ARRAY_BUFFER, CHUNK_SIZE * sizeof(PointVertex), nullptr, GL_DYNAMIC_DRAW);
+
+        glBindVertexArray(m_chunkVaos[i]);
+
+        // Attribute 0: quad vertex (shared, per-vertex)
+        glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glVertexAttribDivisor(0, 0);
+
+        setupInstanceAttribs(m_chunkVbos[i]);
+        glBindVertexArray(0);
+    }
+
+    // --- Streaming mode: single dynamic VBO + VAO ---
+    glGenBuffers(1, &m_streamVbo);
+    glGenVertexArrays(1, &m_streamVao);
+
+    glBindVertexArray(m_streamVao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glVertexAttribDivisor(0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_streamVbo);
+    setupInstanceAttribs(m_streamVbo);
+
+    glBindVertexArray(0);
+}
+
 void PointRenderer::cleanup() {
-    if (m_vao) glDeleteVertexArrays(1, &m_vao);
     if (m_quadVbo) glDeleteBuffers(1, &m_quadVbo);
-    if (m_instanceVbo) glDeleteBuffers(1, &m_instanceVbo);
+    glDeleteBuffers(NUM_CHUNKS, m_chunkVbos);
+    glDeleteVertexArrays(NUM_CHUNKS, m_chunkVaos);
+    if (m_streamVbo) glDeleteBuffers(1, &m_streamVbo);
+    if (m_streamVao) glDeleteVertexArrays(1, &m_streamVao);
     if (m_shader) glDeleteProgram(m_shader);
 }
 
-void PointRenderer::begin(const Mat3& viewProjection, float aspectRatio) {
-    m_viewProjection = viewProjection;
-    m_aspectRatio = aspectRatio;
-    m_points.clear();
+// --- Chunked mode ---
+
+void PointRenderer::updateChunk(size_t chunkIndex, const PointVertex* data, size_t count) {
+    if (chunkIndex >= NUM_CHUNKS) return;
+
+    m_chunkPointCounts[chunkIndex] = count;
+    if (count == 0) return;
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_chunkVbos[chunkIndex]);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, count * sizeof(PointVertex), data);
 }
 
-void PointRenderer::addPoint(const Vec2& pos, const Color& color, float size) {
-    m_points.push_back({pos, color, size});
-}
-
-void PointRenderer::end() {
-    if (m_points.empty()) return;
-
-    // Debug output
-    static bool first_call = true;
-    if (first_call) {
-        std::cout << "PointRenderer::end() called with " << m_points.size() << " points" << std::endl;
-        first_call = false;
-    }
+void PointRenderer::drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks) {
+    if (numActiveChunks == 0) return;
 
     glUseProgram(m_shader);
 
-    // Upload view-projection matrix
     GLint loc = glGetUniformLocation(m_shader, "u_viewProjection");
-    glUniformMatrix3fv(loc, 1, GL_FALSE, m_viewProjection.m);
+    glUniformMatrix3fv(loc, 1, GL_FALSE, viewProjection.m);
 
-    // Upload aspect ratio
     GLint aspectLoc = glGetUniformLocation(m_shader, "u_aspectRatio");
-    glUniform1f(aspectLoc, m_aspectRatio);
+    glUniform1f(aspectLoc, aspectRatio);
 
-    // Upload instance data
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_instanceVbo);
-    glBufferData(GL_ARRAY_BUFFER, m_points.size() * sizeof(PointVertex), m_points.data(), GL_STREAM_DRAW);
-
-    // Enable blending for smooth points
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Draw instances: 4 vertices per quad, N instances
-    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, static_cast<GLsizei>(m_points.size()));
+    size_t limit = numActiveChunks < NUM_CHUNKS ? numActiveChunks : NUM_CHUNKS;
+    for (size_t i = 0; i < limit; i++) {
+        if (m_chunkPointCounts[i] == 0) continue;
+        glBindVertexArray(m_chunkVaos[i]);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, static_cast<GLsizei>(m_chunkPointCounts[i]));
+    }
 
     glDisable(GL_BLEND);
     glBindVertexArray(0);
     glUseProgram(0);
+}
+
+// --- Streaming mode ---
+
+void PointRenderer::begin(const Mat3& viewProjection, float aspectRatio) {
+    m_viewProjection = viewProjection;
+    m_aspectRatio = aspectRatio;
+    m_streamPoints.clear();
+}
+
+void PointRenderer::addPoint(const Vec2& pos, const Color& color, float size) {
+    m_streamPoints.push_back({pos, color, size});
+}
+
+void PointRenderer::end() {
+    if (m_streamPoints.empty()) return;
+
+    glUseProgram(m_shader);
+
+    GLint loc = glGetUniformLocation(m_shader, "u_viewProjection");
+    glUniformMatrix3fv(loc, 1, GL_FALSE, m_viewProjection.m);
+
+    GLint aspectLoc = glGetUniformLocation(m_shader, "u_aspectRatio");
+    glUniform1f(aspectLoc, m_aspectRatio);
+
+    glBindVertexArray(m_streamVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_streamVbo);
+    glBufferData(GL_ARRAY_BUFFER, m_streamPoints.size() * sizeof(PointVertex), m_streamPoints.data(), GL_STREAM_DRAW);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, static_cast<GLsizei>(m_streamPoints.size()));
+
+    glDisable(GL_BLEND);
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+// --- Stats ---
+
+size_t PointRenderer::pointCount() const {
+    size_t total = 0;
+    for (size_t i = 0; i < NUM_CHUNKS; i++) {
+        total += m_chunkPointCounts[i];
+    }
+    return total;
 }

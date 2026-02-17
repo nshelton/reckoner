@@ -8,6 +8,7 @@ Renderer::Renderer()
 {
    m_lines.init();
    m_tiles.init();
+   m_chunkBuildBuf.reserve(PointRenderer::CHUNK_SIZE);
 }
 
 void Renderer::render(const Camera &camera, const AppModel &model, const InteractionState &uiState)
@@ -72,33 +73,65 @@ void Renderer::renderGrid(const Camera &camera, const AppModel &model)
    }
 }
 
-void Renderer::renderEntities(const Camera &camera, const AppModel &model)
+void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
 {
-   float aspectRatio = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
-   m_points.begin(camera.Transform(), aspectRatio);
+   m_chunkBuildBuf.clear();
 
-   int rendered_count = 0;
-   // Render entities that have location data
-   // Entities are already in lat/lon coordinates - use them directly!
-   for (const auto& entity : model.entities)
-   {
+   size_t start = chunkIndex * PointRenderer::CHUNK_SIZE;
+   size_t end = std::min(start + PointRenderer::CHUNK_SIZE, model.entities.size());
+
+   Color pointColor(1.0f, 0.0f, 0.0f, 0.3f);
+
+   for (size_t i = start; i < end; i++) {
+      const auto& entity = model.entities[i];
       if (!entity.has_location()) continue;
 
-      // Use lat/lon coordinates directly (longitude=x, latitude=y)
       Vec2 geoPos(*entity.lon, *entity.lat);
-
-      // Render as a bright red point
-      Color pointColor(1.0f, 0.0f, 0.0f, 0.3f);
-      m_points.addPoint(geoPos, pointColor, m_pointSize);
-      rendered_count++;
+      m_chunkBuildBuf.push_back({geoPos, pointColor, m_pointSize});
    }
 
-   // Debug output on first render
-   static bool first_render = true;
-   if (first_render && rendered_count > 0) {
-      std::cout << "PointRenderer: Rendering " << rendered_count << " points in lat/lon coordinates" << std::endl;
-      first_render = false;
+   m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());
+}
+
+void Renderer::renderEntities(const Camera &camera, const AppModel &model)
+{
+   size_t entityCount = model.entities.size();
+   size_t writeIdx = model.entities.writeIndex();
+
+   if (entityCount == 0) return;
+
+   size_t numActiveChunks = (entityCount + PointRenderer::CHUNK_SIZE - 1) / PointRenderer::CHUNK_SIZE;
+
+   // Determine which chunks are dirty
+   if (writeIdx != m_lastWriteIndex || entityCount != m_lastEntityCount) {
+      if (m_lastEntityCount == 0) {
+         // First time: rebuild all populated chunks
+         for (size_t c = 0; c < numActiveChunks; c++) {
+            rebuildChunk(c, model);
+         }
+      } else {
+         // Figure out which chunks were written to since last frame
+         size_t oldChunk = m_lastWriteIndex / PointRenderer::CHUNK_SIZE;
+         size_t newChunk = (writeIdx == 0 ? (PointRenderer::NUM_CHUNKS - 1) : (writeIdx - 1) / PointRenderer::CHUNK_SIZE);
+
+         if (oldChunk == newChunk) {
+            // Writes stayed within one chunk
+            rebuildChunk(oldChunk, model);
+         } else {
+            // Writes crossed chunk boundaries — rebuild all touched chunks
+            size_t c = oldChunk;
+            while (true) {
+               rebuildChunk(c, model);
+               if (c == newChunk) break;
+               c = (c + 1) % PointRenderer::NUM_CHUNKS;
+            }
+         }
+      }
+
+      m_lastWriteIndex = writeIdx;
+      m_lastEntityCount = entityCount;
    }
 
-   m_points.end();
+   float aspectRatio = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
+   m_points.drawChunked(camera.Transform(), aspectRatio, numActiveChunks);
 }

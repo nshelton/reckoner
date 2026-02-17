@@ -12,17 +12,46 @@ static size_t curlWriteCallback(void* contents, size_t size, size_t nmemb, void*
     return totalSize;
 }
 
+TileCache::TileCache() = default;
+
 TileCache::~TileCache() {
     for (auto& f : m_inFlight) {
         if (f.valid()) f.wait();
     }
+    for (auto* curl : m_curlPool) {
+        curl_easy_cleanup(curl);
+    }
+}
+
+CURL* TileCache::acquireCurl() {
+    std::lock_guard<std::mutex> lock(m_curlPoolMutex);
+    if (!m_curlPool.empty()) {
+        CURL* curl = m_curlPool.back();
+        m_curlPool.pop_back();
+        return curl;
+    }
+    // Create a new handle with common options pre-set
+    CURL* curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "reckoner/1.0");
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    }
+    return curl;
+}
+
+void TileCache::releaseCurl(CURL* curl) {
+    std::lock_guard<std::mutex> lock(m_curlPoolMutex);
+    m_curlPool.push_back(curl);
 }
 
 TileCache::FetchResult TileCache::downloadAndDecode(const TileKey& key) {
     FetchResult result;
     result.key = key;
 
-    CURL* curl = curl_easy_init();
+    CURL* curl = acquireCurl();
     if (!curl) return result;
 
     // Versatiles OSM vector tiles (free, no API key)
@@ -33,18 +62,13 @@ TileCache::FetchResult TileCache::downloadAndDecode(const TileKey& key) {
 
     std::vector<uint8_t> rawData;
     curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &rawData);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "reckoner/1.0");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, ""); // Accept gzip/deflate
 
     CURLcode res = curl_easy_perform(curl);
 
     long httpCode = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
-    curl_easy_cleanup(curl);
+    releaseCurl(curl);
 
     if (res != CURLE_OK || httpCode != 200) {
         return result;
@@ -96,6 +120,9 @@ void TileCache::processCompletedFetches() {
             entry.state = TileState::Failed;
         }
     }
+
+    // Start queued fetches now that slots may have freed up
+    drainPendingQueue();
 }
 
 const std::vector<TileLine>* TileCache::requestTile(const TileKey& key) {
@@ -108,17 +135,32 @@ const std::vector<TileLine>* TileCache::requestTile(const TileKey& key) {
         return nullptr;
     }
 
+    // Queue tile for fetching (deduplicate)
+    m_tiles[key].state = TileState::Empty;
+    m_pendingQueue.push_back(key);
+
+    drainPendingQueue();
+
+    return nullptr;
+}
+
+void TileCache::drainPendingQueue() {
     // Count active fetches
     int activeCount = 0;
     for (const auto& [k, e] : m_tiles) {
         if (e.state == TileState::Fetching) activeCount++;
     }
 
-    if (activeCount < 4) {
-        fetchTileAsync(key);
-    }
+    while (!m_pendingQueue.empty() && activeCount < MaxConcurrentFetches) {
+        TileKey key = m_pendingQueue.front();
+        m_pendingQueue.pop_front();
 
-    return nullptr;
+        auto& entry = m_tiles[key];
+        if (entry.state != TileState::Empty) continue; // already fetching/ready
+
+        fetchTileAsync(key);
+        activeCount++;
+    }
 }
 
 void TileCache::evictOldTiles(int maxTiles) {

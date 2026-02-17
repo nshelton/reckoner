@@ -53,8 +53,8 @@ std::vector<Entity> BackendAPI::fetch_bbox(
             {"start", TimeUtils::to_iso8601(time_extent.start)},
             {"end", TimeUtils::to_iso8601(time_extent.end)}
         }},
-        {"limit", limit},
-        {"order", "random"}  // Uniformly distributed random sampling
+        {"limit", limit}
+        // {"order", "random"}  // Uniformly distributed random sampling
     };
 
     try {

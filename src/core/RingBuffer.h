@@ -25,6 +25,7 @@ public:
 
     size_t size() const { return m_count; }
     size_t capacity() const { return N; }
+    size_t writeIndex() const { return m_index; }
     bool empty() const { return m_count == 0; }
     bool full() const { return m_count == N; }
 

@@ -11,6 +11,8 @@ size_t HttpClient::write_callback(void* contents, size_t size, size_t nmemb, voi
 }
 
 nlohmann::json HttpClient::get(const std::string& url) {
+    std::cout << "GET: " << url << std::endl;
+    
     CURL* curl = curl_easy_init();
     if (!curl) {
         throw std::runtime_error("Failed to initialize CURL");

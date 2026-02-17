@@ -11,6 +11,7 @@
 #include "Camera.h"
 
 #include <iostream>
+#include <vector>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 
@@ -51,6 +52,12 @@ private:
     PointRenderer m_points{};
     TileRenderer m_tiles{};
 
+    // Dirty-chunk tracking for entity ring buffer
+    size_t m_lastWriteIndex = 0;
+    size_t m_lastEntityCount = 0;
+    std::vector<PointVertex> m_chunkBuildBuf;  // Reusable scratch buffer
+
     void renderGrid(const Camera &camera, const AppModel &model);
     void renderEntities(const Camera &camera, const AppModel &model);
+    void rebuildChunk(size_t chunkIndex, const AppModel &model);
 };
