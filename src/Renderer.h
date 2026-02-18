@@ -41,6 +41,9 @@ public:
     void setTilesEnabled(bool enabled) { m_tilesEnabled = enabled; }
     bool tilesEnabled() const { return m_tilesEnabled; }
 
+    // Shared access to the point renderer (used by TimelineRenderer)
+    PointRenderer& points() { return m_points; }
+
     // Debug/stats
     int totalVertices() const { return static_cast<int>(m_lines.totalVertices()); }
     int totalPoints() const { return static_cast<int>(m_points.pointCount()); }

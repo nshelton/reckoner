@@ -80,14 +80,15 @@ void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
    size_t start = chunkIndex * PointRenderer::CHUNK_SIZE;
    size_t end = std::min(start + PointRenderer::CHUNK_SIZE, model.entities.size());
 
-   Color pointColor(1.0f, 1.0f, 1.0f, 0.3f);  // Alpha only; RGB from turbo colormap
-
    for (size_t i = start; i < end; i++) {
       const auto& entity = model.entities[i];
       if (!entity.has_location()) continue;
 
-      Vec2 geoPos(*entity.lon, *entity.lat);
-      m_chunkBuildBuf.push_back({geoPos, static_cast<float>(entity.time_start)});
+      m_chunkBuildBuf.push_back({
+          Vec2(static_cast<float>(*entity.lon), static_cast<float>(*entity.lat)),
+          static_cast<float>(entity.time_mid()),
+          entity.render_offset
+      });
    }
 
    m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());

@@ -367,7 +367,7 @@ void MainScreen::onPostGuiRender()
         glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        m_timelineRenderer.render(m_timelineCamera, m_model);
+        m_timelineRenderer.render(m_timelineCamera, m_model, m_renderer.points());
 
         glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, fbWidth, fbHeight);

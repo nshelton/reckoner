@@ -12,15 +12,15 @@ public:
     TimelineRenderer();
     void shutdown();
 
-    /// Render grid lines + labels + entities (call within glViewport/glScissor context)
-    void render(const TimelineCamera &camera, const AppModel &model);
+    /// Render grid lines + labels + entities (call within glViewport/glScissor context).
+    /// points is the shared PointRenderer owned by Renderer (map view).
+    void render(const TimelineCamera& camera, const AppModel& model, PointRenderer& points);
 
 private:
     LineRenderer m_lines;
-    PointRenderer m_points;
     TextRenderer m_text;
 
-    void renderGrid(const TimelineCamera &camera);
-    void renderLabels(const TimelineCamera &camera);
-    void renderEntities(const TimelineCamera &camera, const AppModel &model);
+    void renderGrid(const TimelineCamera& camera);
+    void renderLabels(const TimelineCamera& camera);
+    void renderEntities(const TimelineCamera& camera, const AppModel& model, PointRenderer& points);
 };

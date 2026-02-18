@@ -24,10 +24,9 @@ static const TickLevel kTickLevels[] = {
 };
 static const int kNumTickLevels = sizeof(kTickLevels) / sizeof(kTickLevels[0]);
 
-// Fade thresholds (in pixels per interval)
-static const double kGridFadeMin = 4.0;
-static const double kGridFadeMax = 200.0;
-static const double kLabelFadeMin = 60.0;
+static const double kGridFadeMin  =  4.0;
+static const double kGridFadeMax  = 200.0;
+static const double kLabelFadeMin =  60.0;
 static const double kLabelFadeMax = 200.0;
 
 TimelineRenderer::TimelineRenderer()
@@ -42,14 +41,15 @@ void TimelineRenderer::shutdown()
     m_text.shutdown();
 }
 
-void TimelineRenderer::render(const TimelineCamera &camera, const AppModel &model)
+void TimelineRenderer::render(const TimelineCamera& camera, const AppModel& model,
+                               PointRenderer& points)
 {
     m_lines.clear();
     renderGrid(camera);
     m_lines.draw(camera.getTransform());
 
     renderLabels(camera);
-    renderEntities(camera, model);
+    renderEntities(camera, model, points);
 }
 
 void TimelineRenderer::renderGrid(const TimelineCamera &camera)
@@ -70,9 +70,7 @@ void TimelineRenderer::renderGrid(const TimelineCamera &camera)
         if (pixelsPerInterval < kGridFadeMax)
             alpha = static_cast<float>((pixelsPerInterval - kGridFadeMin) / (kGridFadeMax - kGridFadeMin));
 
-        // Coarser levels get taller ticks
         float tickHeight = 0.3f + 0.7f * static_cast<float>(i) / static_cast<float>(kNumTickLevels - 1);
-
         Color tickColor(0.5f, 0.5f, 0.5f, alpha * 0.8f);
 
         double firstTick = std::floor(left / interval) * interval;
@@ -90,12 +88,11 @@ void TimelineRenderer::renderLabels(const TimelineCamera &camera)
     double right = camera.center() + camera.zoom();
     double secondsPerPixel = (2.0 * camera.zoom()) / camera.width();
 
-    float textSize = 0.05f;
-    float rowHeight = textSize * 1.3f; // spacing between label rows
+    float textSize  = 0.05f;
+    float rowHeight = textSize * 1.3f;
 
     m_text.begin(camera.getTransform(), camera.aspectRatio());
 
-    // Assign each visible level a row, coarsest at bottom (row 0)
     int row = 0;
     for (int i = kNumTickLevels - 1; i >= 0; i--)
     {
@@ -110,8 +107,6 @@ void TimelineRenderer::renderLabels(const TimelineCamera &camera)
             alpha = static_cast<float>((pixelsPerInterval - kLabelFadeMin) / (kLabelFadeMax - kLabelFadeMin));
 
         Color textColor(0.8f, 0.8f, 0.8f, alpha);
-
-        // Y position: bottom of viewport, stacking upward per row
         float y = -0.95f + static_cast<float>(row) * rowHeight;
 
         double firstTick = std::floor(left / interval) * interval;
@@ -119,14 +114,11 @@ void TimelineRenderer::renderLabels(const TimelineCamera &camera)
         {
             std::time_t tt = static_cast<std::time_t>(t);
             std::tm *tm_info = std::gmtime(&tt);
-            if (!tm_info)
-                continue;
+            if (!tm_info) continue;
 
             char buf[64];
             std::strftime(buf, sizeof(buf), kTickLevels[i].labelFormat, tm_info);
-
-            Vec2 labelPos(static_cast<float>(t), y);
-            m_text.addText(buf, labelPos, textColor, textSize, 0.5f);
+            m_text.addText(buf, Vec2(static_cast<float>(t), y), textColor, textSize, 0.5f);
         }
 
         row++;
@@ -135,26 +127,24 @@ void TimelineRenderer::renderLabels(const TimelineCamera &camera)
     m_text.end();
 }
 
-void TimelineRenderer::renderEntities(const TimelineCamera &camera, const AppModel &model)
+void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppModel& model,
+                                       PointRenderer& points)
 {
-    float aspectRatio = static_cast<float>(camera.width()) / 100.0f;
-    m_points.begin(camera.getTransform(), aspectRatio);
+    if (model.entities.empty()) return;
 
-    int idx = 0;
+    size_t numChunks = (model.entities.size() + PointRenderer::CHUNK_SIZE - 1)
+                       / PointRenderer::CHUNK_SIZE;
+
+    float aspect = static_cast<float>(camera.width()) / 100.0f;
     TimeExtent visible = camera.getTimeExtent();
+    float tMin = static_cast<float>(visible.start);
+    float tMax = static_cast<float>(visible.end);
 
-    for (const auto &entity : model.entities)
-    {
-        if (entity.time_start > visible.end || entity.time_end < visible.start)
-            continue;
-
-        float y = 0.0f;
-        float x = static_cast<float>(entity.time_mid());
-        m_points.addPoint(Vec2(x, y), static_cast<float>(entity.time_start));
-        idx++;
-    }
-
-    float timeMin = static_cast<float>(visible.start);
-    float timeMax = static_cast<float>(visible.end);
-    m_points.end(timeMin, timeMax);
+    PointRenderer::MapExtent mapExtent{
+        static_cast<float>(model.spatial_extent.min_lon),
+        static_cast<float>(model.spatial_extent.max_lon),
+        static_cast<float>(model.spatial_extent.min_lat),
+        static_cast<float>(model.spatial_extent.max_lat)
+    };
+    points.drawForTimeline(camera.getTransform(), aspect, numChunks, tMin, tMax, mapExtent);
 }
