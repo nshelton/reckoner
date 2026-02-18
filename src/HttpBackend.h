@@ -22,11 +22,11 @@ public:
         std::function<void(std::vector<Entity>&&)> callback
     ) override;
 
-    /// Fetch all entities via paginated requests, calling batch_callback with each chunk.
-    /// Blocks until all pages are fetched or cancelled.
-    void fetchAllEntities(
-        const TimeExtent& time,
-        const SpatialExtent& space,
+    /// Stream all entities from GET /v1/query/export, calling on_total once with
+    /// the count from the first NDJSON line, then batch_callback for each chunk.
+    /// Blocks until the stream ends or cancelFetch() is called.
+    void streamAllEntities(
+        std::function<void(size_t total)> on_total,
         std::function<void(std::vector<Entity>&&)> batch_callback
     );
 

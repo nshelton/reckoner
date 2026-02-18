@@ -97,41 +97,58 @@ std::vector<Entity> BackendAPI::fetch_time(
     }
 }
 
-std::vector<Entity> BackendAPI::parse_entities(const nlohmann::json& json_array) {
-    std::vector<Entity> result;
+void BackendAPI::fetch_export(
+    std::function<void(size_t)> on_total,
+    std::function<bool(Entity&&)> on_entity)
+{
+    bool first_line = true;
 
-    for (const auto& j : json_array) {
-        Entity e;
-        e.id = j["id"].get<std::string>();
+    http_client_.get_stream(base_url_ + "/v1/query/export",
+        [&](const std::string& line) -> bool {
+            try {
+                auto j = nlohmann::json::parse(line);
 
-        // Parse timestamps
-        e.time_start = TimeUtils::parse_iso8601(j["t_start"].get<std::string>());
+                if (first_line) {
+                    first_line = false;
+                    if (j.contains("total")) {
+                        on_total(j["total"].get<size_t>());
+                        return true;
+                    }
+                    // Unexpected first line — fall through and parse as entity
+                }
 
-        if (j["t_end"].is_null()) {
-            e.time_end = e.time_start;  // Instant event
-        } else {
-            e.time_end = TimeUtils::parse_iso8601(j["t_end"].get<std::string>());
-        }
+                return on_entity(parse_entity(j));
+            } catch (const nlohmann::json::exception& ex) {
+                std::cerr << "Export JSON parse error: " << ex.what() << std::endl;
+                return true;  // Skip bad line, keep streaming
+            }
+        });
+}
 
-        // Parse optional location
-        if (!j["lat"].is_null()) {
-            e.lat = j["lat"].get<double>();
-        }
-        if (!j["lon"].is_null()) {
-            e.lon = j["lon"].get<double>();
-        }
+Entity BackendAPI::parse_entity(const nlohmann::json& j) {
+    Entity e;
+    e.id = j["id"].get<std::string>();
 
-        // Parse optional display fields
-        if (!j["name"].is_null()) {
-            e.name = j["name"].get<std::string>();
-        }
-
-        if (!j["render_offset"].is_null()) {
-            e.render_offset = j["render_offset"].get<float>();
-        }
-
-        result.push_back(std::move(e));
+    e.time_start = TimeUtils::parse_iso8601(j["t_start"].get<std::string>());
+    if (j["t_end"].is_null()) {
+        e.time_end = e.time_start;
+    } else {
+        e.time_end = TimeUtils::parse_iso8601(j["t_end"].get<std::string>());
     }
 
+    if (!j["lat"].is_null()) e.lat = j["lat"].get<double>();
+    if (!j["lon"].is_null()) e.lon = j["lon"].get<double>();
+    if (!j["name"].is_null()) e.name = j["name"].get<std::string>();
+    if (!j["render_offset"].is_null()) e.render_offset = j["render_offset"].get<float>();
+
+    return e;
+}
+
+std::vector<Entity> BackendAPI::parse_entities(const nlohmann::json& json_array) {
+    std::vector<Entity> result;
+    result.reserve(json_array.size());
+    for (const auto& j : json_array) {
+        result.push_back(parse_entity(j));
+    }
     return result;
 }

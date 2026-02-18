@@ -422,21 +422,15 @@ void MainScreen::startFullLoad()
     m_model.is_fetching = true;
     m_model.startFetch();
 
-    // Use full time range for loading everything
-    TimeExtent fullTime = m_model.time_extent;
-    // Use a huge spatial extent to get everything
-    SpatialExtent fullSpace;
-    fullSpace.min_lat = -90.0;
-    fullSpace.max_lat = 90.0;
-    fullSpace.min_lon = -180.0;
-    fullSpace.max_lon = 180.0;
-
     if (m_backendType == BackendType::Http) {
         auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
         if (!httpBackend) return;
 
-        m_pendingFetch = std::async(std::launch::async, [this, httpBackend, fullTime, fullSpace]() {
-            httpBackend->fetchAllEntities(fullTime, fullSpace,
+        m_pendingFetch = std::async(std::launch::async, [this, httpBackend]() {
+            httpBackend->streamAllEntities(
+                [this](size_t total) {
+                    m_model.total_expected.store(total);
+                },
                 [this](std::vector<Entity>&& batch) {
                     std::lock_guard<std::mutex> lock(m_batchMutex);
                     m_completedBatches.push_back(std::move(batch));
@@ -446,6 +440,13 @@ void MainScreen::startFullLoad()
         });
     } else {
         // Fake backend: single fetch
+        TimeExtent fullTime = m_model.time_extent;
+        SpatialExtent fullSpace;
+        fullSpace.min_lat = -90.0;
+        fullSpace.max_lat = 90.0;
+        fullSpace.min_lon = -180.0;
+        fullSpace.max_lon = 180.0;
+
         m_pendingFetch = std::async(std::launch::async, [this, fullTime, fullSpace]() {
             m_backend->fetchEntities(fullTime, fullSpace,
                 [this](std::vector<Entity>&& batch) {
@@ -466,7 +467,6 @@ void MainScreen::fetchServerStats()
         if (httpBackend) {
             m_serverStats = httpBackend->fetchStats();
             m_hasServerStats = true;
-            m_model.total_expected.store(static_cast<size_t>(m_serverStats.total_entities));
         }
     }
 }

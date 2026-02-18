@@ -10,6 +10,82 @@ size_t HttpClient::write_callback(void* contents, size_t size, size_t nmemb, voi
     return total_size;
 }
 
+namespace {
+    struct StreamContext {
+        std::string buffer;
+        std::function<bool(const std::string&)> callback;
+        bool stop = false;
+    };
+}
+
+size_t HttpClient::stream_write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
+    size_t total = size * nmemb;
+    auto* ctx = static_cast<StreamContext*>(userp);
+
+    ctx->buffer.append(static_cast<char*>(contents), total);
+
+    size_t pos;
+    while ((pos = ctx->buffer.find('\n')) != std::string::npos) {
+        std::string line = ctx->buffer.substr(0, pos);
+        ctx->buffer.erase(0, pos + 1);
+        if (!line.empty()) {
+            if (!ctx->callback(line)) {
+                ctx->stop = true;
+                return 0;  // Signals curl to abort (CURLE_WRITE_ERROR)
+            }
+        }
+    }
+
+    return total;
+}
+
+void HttpClient::get_stream(const std::string& url,
+                             std::function<bool(const std::string&)> line_callback) {
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("Failed to initialize CURL");
+
+    StreamContext ctx;
+    ctx.callback = std::move(line_callback);
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, stream_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ctx);
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");  // Auto-decompress gzip
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);            // 5 min for large datasets
+
+    struct curl_slist* headers = nullptr;
+    if (!m_apiKey.empty()) {
+        std::string auth_header = "X-API-Key: " + m_apiKey;
+        headers = curl_slist_append(headers, auth_header.c_str());
+    }
+    if (headers) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (headers) curl_slist_free_all(headers);
+
+    // CURLE_WRITE_ERROR is expected when the callback returns false (early cancel)
+    if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
+        std::string err = "CURL stream failed: ";
+        err += curl_easy_strerror(res);
+        curl_easy_cleanup(curl);
+        throw std::runtime_error(err);
+    }
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+
+    if (res == CURLE_OK && (http_code < 200 || http_code >= 300)) {
+        throw std::runtime_error("HTTP stream failed with code " + std::to_string(http_code));
+    }
+
+    // Flush any remaining content in the buffer (final line with no trailing newline)
+    if (!ctx.buffer.empty() && !ctx.stop) {
+        ctx.callback(ctx.buffer);
+    }
+}
+
 nlohmann::json HttpClient::get(const std::string& url) {
     std::cout << "GET: " << url << std::endl;
     
