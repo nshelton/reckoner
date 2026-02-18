@@ -3,6 +3,7 @@
 #include "core/Vec2.h"
 #include "core/Color.h"
 #include "core/Mat3.h"
+#include "renderer/Shader.h"
 #include <vector>
 
 #define GL_GLEXT_PROTOTYPES
@@ -12,8 +13,6 @@
 /// Vertex data for a single point instance
 struct PointVertex {
     Vec2 position;
-    Color color;
-    float size;
     float timestamp;  // Unix epoch seconds, used for turbo colormap
 };
 
@@ -40,7 +39,7 @@ public:
 
     // --- Streaming mode (timeline renderer) ---
     void begin(const Mat3& viewProjection, float aspectRatio);
-    void addPoint(const Vec2& pos, const Color& color, float size = 1.0f, float timestamp = 0.0f);
+    void addPoint(const Vec2& pos, float timestamp = 0.0f);
     void end(float timeMin = 0.0f, float timeMax = 0.0f);
 
     /// Total points across all chunked buffers
@@ -49,10 +48,14 @@ public:
     /// Number of allocated chunks
     size_t numChunks() const { return m_chunkVaos.size(); }
 
+    float getPointSize() const { return m_size; }
+    void setPointSize(float size) { this->m_size = size; }
+
+
 private:
     // Shared
     GLuint m_quadVbo = 0;
-    GLuint m_shader = 0;
+    Shader m_shader;
 
     // Chunked mode state (dynamically sized)
     std::vector<GLuint> m_chunkVaos;
@@ -65,6 +68,8 @@ private:
     std::vector<PointVertex> m_streamPoints;
     Mat3 m_viewProjection;
     float m_aspectRatio = 1.0f;
+
+    float m_size = 1;
 
     void initShaders();
     void initBuffers();

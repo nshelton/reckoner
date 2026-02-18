@@ -52,3 +52,13 @@ target_link_libraries(reckoner PRIVATE
   CURL::libcurl
   nlohmann_json::nlohmann_json
 )
+
+# Inject the absolute path to the shader source directory so shaders can be
+# loaded from disk at runtime without copying them to the build directory.
+# Override by passing -DSHADER_BASE_DIR=<path> to cmake.
+if(NOT DEFINED SHADER_BASE_DIR)
+  set(SHADER_BASE_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
+endif()
+target_compile_definitions(reckoner PRIVATE
+  SHADER_BASE_DIR="${SHADER_BASE_DIR}"
+)

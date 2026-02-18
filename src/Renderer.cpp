@@ -87,8 +87,7 @@ void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
       if (!entity.has_location()) continue;
 
       Vec2 geoPos(*entity.lon, *entity.lat);
-      m_chunkBuildBuf.push_back({geoPos, pointColor, m_pointSize,
-                                 static_cast<float>(entity.time_start)});
+      m_chunkBuildBuf.push_back({geoPos, static_cast<float>(entity.time_start)});
    }
 
    m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());

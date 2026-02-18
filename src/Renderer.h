@@ -35,8 +35,8 @@ public:
     void setLineWidth(float w) { m_lines.setLineWidth(w); }
     float lineWidth() const { return m_lines.lineWidth(); }
 
-    void setPointSize(float size) { m_pointSize = size; }
-    float pointSize() const { return m_pointSize; }
+    void setPointSize(float size) { m_points.setPointSize(size); }
+    float pointSize() const { return m_points.getPointSize(); }
 
     void setTilesEnabled(bool enabled) { m_tilesEnabled = enabled; }
     bool tilesEnabled() const { return m_tilesEnabled; }

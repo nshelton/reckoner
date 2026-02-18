@@ -150,8 +150,7 @@ void TimelineRenderer::renderEntities(const TimelineCamera &camera, const AppMod
 
         float y = 0.0f;
         float x = static_cast<float>(entity.time_mid());
-        Color c(1.0f, 1.0f, 1.0f, 0.9f);  // Alpha only; RGB from turbo colormap
-        m_points.addPoint(Vec2(x, y), c, 2.0f, static_cast<float>(entity.time_start));
+        m_points.addPoint(Vec2(x, y), static_cast<float>(entity.time_start));
         idx++;
     }
 
