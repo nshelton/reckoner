@@ -31,6 +31,10 @@ public:
     /// Main render call - draws the scene
     void render(const Camera &camera, const AppModel &model, const InteractionState &uiState);
 
+    /// Draw a highlight ring over a geographic position.
+    /// Call after render() while the same GL viewport/scissor is still active.
+    void drawMapHighlight(const Camera &camera, double lon, double lat);
+
     // Rendering configuration
     void setLineWidth(float w) { m_lines.setLineWidth(w); }
     float lineWidth() const { return m_lines.lineWidth(); }

@@ -4,6 +4,8 @@
 #include <cmath>
 #include "core/Theme.h"
 
+static constexpr float kPi = 3.14159265358979323846f;
+
 Renderer::Renderer()
 {
    m_lines.init();
@@ -92,6 +94,36 @@ void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
    }
 
    m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());
+}
+
+void Renderer::drawMapHighlight(const Camera &camera, double lon, double lat)
+{
+    m_lines.clear();
+    m_lines.setLineWidth(2.0f);
+
+    Color c(1.0f, 0.95f, 0.2f, 0.9f);
+
+    // Compute world-space radii so the ring is a fixed pixel size on screen.
+    // The camera maps lat range [bottom, top] (size = 2*zoom) to height pixels.
+    const float pixelRadius = 12.0f;
+    float lat_r = pixelRadius * 2.0f * camera.zoom() / static_cast<float>(camera.height());
+    float latRad = static_cast<float>(lat) * kPi / 180.0f;
+    float cosLat = std::max(0.001f, std::cos(latRad));
+    float lon_r  = lat_r / cosLat;
+
+    constexpr int N = 24;
+    for (int i = 0; i < N; ++i) {
+        float a0 = 2.0f * kPi * static_cast<float>(i)     / static_cast<float>(N);
+        float a1 = 2.0f * kPi * static_cast<float>(i + 1) / static_cast<float>(N);
+        Vec2 p0(static_cast<float>(lon) + lon_r * std::cos(a0),
+                static_cast<float>(lat) + lat_r * std::sin(a0));
+        Vec2 p1(static_cast<float>(lon) + lon_r * std::cos(a1),
+                static_cast<float>(lat) + lat_r * std::sin(a1));
+        m_lines.addLine(p0, p1, c);
+    }
+
+    m_lines.draw(camera.Transform());
+    m_lines.setLineWidth(1.0f);
 }
 
 void Renderer::renderEntities(const Camera &camera, const AppModel &model)

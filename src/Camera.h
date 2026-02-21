@@ -33,8 +33,9 @@ public:
 
     void setCenter(Vec2 center)
     {
-        m_left = center.x - m_aspect * m_zoom;
-        m_right = center.x + m_aspect * m_zoom;
+        float lonH = lonHalf(center.y);
+        m_left = center.x - lonH;
+        m_right = center.x + lonH;
         m_bottom = center.y - m_zoom;
         m_top = center.y + m_zoom;
         m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
@@ -57,15 +58,30 @@ public:
     void setCenterAndZoom(Vec2 center, float zoom)
     {
         m_zoom = zoom;
-        m_left = center.x - m_aspect * m_zoom;
-        m_right = center.x + m_aspect * m_zoom;
+        float lonH = lonHalf(center.y);
+        m_left = center.x - lonH;
+        m_right = center.x + lonH;
         m_bottom = center.y - m_zoom;
         m_top = center.y + m_zoom;
         m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
     }
 
+    float lonLeft()   const { return m_left; }
+    float lonRight()  const { return m_right; }
+    float latBottom() const { return m_bottom; }
+    float latTop()    const { return m_top; }
+
 private:
     static float clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+    // Longitude half-extent with cosine latitude correction so that
+    // east-west and north-south scales match at the given center latitude.
+    float lonHalf(float centerLat) const
+    {
+        float latRad = centerLat * static_cast<float>(M_PI / 180.0);
+        float cosLat = std::max(0.001f, std::cos(latRad));
+        return m_aspect * m_zoom / cosLat;
+    }
 
     int m_width{0};
     int m_height{0};

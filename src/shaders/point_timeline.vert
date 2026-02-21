@@ -52,9 +52,15 @@ void main() {
     bool inMapView = in_geo_pos.x >= u_mapMinLon && in_geo_pos.x <= u_mapMaxLon &&
                      in_geo_pos.y >= u_mapMinLat && in_geo_pos.y <= u_mapMaxLat;
 
-    // Discard this instance if it belongs to the other pass
-    if (u_filterMode == 0 &&  inMapView) { gl_Position = vec4(0.0); return; }
-    if (u_filterMode == 1 && !inMapView) { gl_Position = vec4(0.0); return; }
+    // Cull this instance by placing it outside the clip volume (z > w → beyond far plane).
+    // All 4 quad vertices for this instance hit the same branch, so no partial triangle leaks.
+    bool skip = (u_filterMode == 0 && inMapView) || (u_filterMode == 1 && !inMapView);
+    if (skip) {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        v_color = vec4(0.0);
+        v_coord = vec2(0.0);
+        return;
+    }
 
     // Transform timeline position (time, render_offset) to NDC
     vec3 center_ndc = u_viewProjection * vec3(in_time_mid, in_render_offset, 1.0);
@@ -72,10 +78,10 @@ void main() {
     if (t < 0.0 || t > 1.0) {
         v_color = vec4(0.1, 0.1, 0.1, 0.5);
     } else if (!inMapView) {
-        // Out-of-map: desaturated gray
-        v_color = vec4(0.5, 0.5, 0.5, 0.2);
+        // Out-of-map: gray (this branch only runs in pass 0)
+        v_color = vec4(0.5, 0.5, 0.5, 0.04);
     } else {
-        // In-map: full turbo color
+        // In-map: full turbo color (this branch only runs in pass 1)
         v_color = vec4(turbo(t), 0.5);
     }
 }

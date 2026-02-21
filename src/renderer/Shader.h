@@ -34,6 +34,7 @@ public:
     void setMat3 (const char* name, const float* colMajor9) const;
     void setFloat(const char* name, float v)                const;
     void setInt  (const char* name, int   v)                const;
+    void setVec4 (const char* name, float x, float y, float z, float w) const;
 
     /// Constructs an empty, invalid shader (valid() == false).
     /// Becomes valid after move-assignment from Shader::fromFiles().

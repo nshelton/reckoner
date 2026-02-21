@@ -14,24 +14,19 @@ void TileRenderer::shutdown() {
 void TileRenderer::render(const Camera& camera, LineRenderer& lines) {
     m_cache.processCompletedFetches();
 
-    // Get visible bounds from camera
-    Vec2 c = camera.center();
-    float halfH = camera.zoom();
-    float aspect = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
-    float halfW = halfH * aspect;
-
-    float lonMin = c.x - halfW;
-    float lonMax = c.x + halfW;
-    float latMin = c.y - halfH;
-    float latMax = c.y + halfH;
+    // Get visible bounds from camera (already cosine-corrected)
+    float lonMin = camera.lonLeft();
+    float lonMax = camera.lonRight();
+    float latMin = camera.latBottom();
+    float latMax = camera.latTop();
 
     // Clamp to valid Mercator lat range
     latMin = std::max(latMin, -85.05f);
     latMax = std::min(latMax, 85.05f);
     if (latMin >= latMax) return;
 
-    // Pick zoom level
-    int zoom = TileMath::zoomForExtent(halfH, camera.height());
+    // Pick zoom level based on lat extent (zoom() returns lat half-size in degrees)
+    int zoom = TileMath::zoomForExtent(camera.zoom(), camera.height());
     zoom = std::max(0, std::min(14, zoom)); // Cap at 14 for vector tiles
 
     // Convert bounds to tile coordinates

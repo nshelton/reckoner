@@ -4,6 +4,8 @@
 #include <iostream>
 #include <cmath>
 #include <future>
+#include <ctime>
+#include <limits>
 
 void MainScreen::onAttach(App &app)
 {
@@ -37,6 +39,22 @@ void MainScreen::onUpdate(double dt)
 
     // Drain completed entity batches from background thread
     drainCompletedBatches();
+
+    // Update the spatial index whenever new entities have arrived.
+    // Incremental path (new entities appended): O(batch) for the grid + O(n) merge.
+    // Full-rebuild path (entities were cleared): O(n log n), only on reload.
+    if (m_pickerDirty) {
+        size_t n = m_model.entities.size();
+        if (n < m_lastPickerEntityCount) {
+            // Data was cleared — full rebuild (likely rebuilding from 0 entities)
+            m_picker.rebuild(m_model.entities);
+        } else if (n > m_lastPickerEntityCount) {
+            // New entities appended — cheap incremental insert + merge
+            m_picker.addEntities(m_model.entities, m_lastPickerEntityCount);
+        }
+        m_lastPickerEntityCount = n;
+        m_pickerDirty = false;
+    }
 }
 
 void MainScreen::onRender()
@@ -132,6 +150,41 @@ void MainScreen::onGui()
                 Vec2 pixelPos(mousePos.x - cursorPos.x, mousePos.y - cursorPos.y);
                 m_camera.zoomAtPixel(pixelPos, io.MouseWheel);
             }
+
+            // Hover picking — find nearest entity under the cursor
+            {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float localX = mousePos.x - cursorPos.x;
+                float localY = mousePos.y - cursorPos.y;
+                Vec2 worldPos = m_camera.screenToWorld({localX, localY});
+                double radius = m_camera.zoom() * 0.02; // ~1% of viewport height in pixels
+                m_hoveredMapEntity = m_picker.pickMap(worldPos.x, worldPos.y, radius);
+
+                if (m_hoveredMapEntity >= 0) {
+                    const auto& e = m_model.entities[m_hoveredMapEntity];
+                    ImGui::BeginTooltip();
+                    if (e.name) ImGui::Text("%s", e.name->c_str());
+                    if (e.has_location())
+                        ImGui::Text("lat %.5f  lon %.5f", *e.lat, *e.lon);
+                    std::time_t t = static_cast<std::time_t>(e.time_mid());
+                    std::tm* tm_info = std::gmtime(&t);
+                    if (tm_info) {
+                        char buf[64];
+                        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S UTC", tm_info);
+                        ImGui::Text("%s", buf);
+                    }
+                    ImGui::EndTooltip();
+
+                    // Double-click → pan the timeline to this entity's time
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                        m_timelineCamera.setCenter(e.time_mid());
+                    }
+                }
+            }
+        }
+        else
+        {
+            m_hoveredMapEntity = -1;
         }
 
         // Set up OpenGL viewport and scissor for this ImGui window
@@ -175,6 +228,44 @@ void MainScreen::onGui()
                 float localX = mousePos.x - cursorPos.x;
                 m_timelineCamera.zoomAtPixel(localX, tio.MouseWheel);
             }
+
+            // Hover picking — find nearest entity under the cursor
+            {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float localX = mousePos.x - cursorPos.x;
+                float localY = mousePos.y - cursorPos.y;
+                double time = m_timelineCamera.screenToTime(localX);
+                // Map local Y to renderOffset: top of window = NDC +1, bottom = NDC -1
+                float renderOffset = 1.0f - 2.0f * (localY / contentSize.y);
+                double timeRadius = m_timelineCamera.zoom() * 0.02;
+                float  yRadius    = 0.1f; // renderOffset units ([-1,1] range)
+                m_hoveredTimelineEntity = m_picker.pickTimeline(time, renderOffset, timeRadius, yRadius);
+
+                if (m_hoveredTimelineEntity >= 0) {
+                    const auto& e = m_model.entities[m_hoveredTimelineEntity];
+                    ImGui::BeginTooltip();
+                    if (e.name) ImGui::Text("%s", e.name->c_str());
+                    if (e.has_location())
+                        ImGui::Text("lat %.5f  lon %.5f", *e.lat, *e.lon);
+                    std::time_t t = static_cast<std::time_t>(e.time_mid());
+                    std::tm* tm_info = std::gmtime(&t);
+                    if (tm_info) {
+                        char buf[64];
+                        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S UTC", tm_info);
+                        ImGui::Text("%s", buf);
+                    }
+                    ImGui::EndTooltip();
+
+                    // Double-click → pan the map to this entity's location
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && e.has_location()) {
+                        m_camera.setCenter({static_cast<float>(*e.lon), static_cast<float>(*e.lat)});
+                    }
+                }
+            }
+        }
+        else
+        {
+            m_hoveredTimelineEntity = -1;
         }
 
         // Compute framebuffer viewport
@@ -302,6 +393,13 @@ void MainScreen::onGui()
         }
 
         ImGui::Separator();
+        ImGui::Text("Layers:");
+        bool histogramEnabled = m_timelineRenderer.histogramEnabled();
+        if (ImGui::Checkbox("Histogram", &histogramEnabled)) {
+            m_timelineRenderer.setHistogramEnabled(histogramEnabled);
+        }
+
+        ImGui::Separator();
         ImGui::Text("Rendering:");
         bool tilesEnabled = m_renderer.tilesEnabled();
         if (ImGui::Checkbox("Show Map Tiles", &tilesEnabled)) {
@@ -346,6 +444,13 @@ void MainScreen::onPostGuiRender()
         // Render the grid and entities
         m_renderer.render(m_camera, m_model, m_interaction.state());
 
+        // Draw highlight ring over the hovered map entity
+        if (m_hoveredMapEntity >= 0 && m_hoveredMapEntity < static_cast<int>(m_model.entities.size())) {
+            const auto& e = m_model.entities[m_hoveredMapEntity];
+            if (e.has_location())
+                m_renderer.drawMapHighlight(m_camera, *e.lon, *e.lat);
+        }
+
         // Disable scissor test
         glDisable(GL_SCISSOR_TEST);
 
@@ -368,6 +473,12 @@ void MainScreen::onPostGuiRender()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         m_timelineRenderer.render(m_timelineCamera, m_model, m_renderer.points());
+
+        // Draw highlight ring over the hovered timeline entity
+        if (m_hoveredTimelineEntity >= 0 && m_hoveredTimelineEntity < static_cast<int>(m_model.entities.size())) {
+            const auto& e = m_model.entities[m_hoveredTimelineEntity];
+            m_timelineRenderer.drawHighlight(m_timelineCamera, e.time_mid(), e.render_offset);
+        }
 
         glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, fbWidth, fbHeight);
@@ -405,6 +516,9 @@ void MainScreen::drainCompletedBatches()
             m_model.entities.push_back(std::move(entity));
         }
     }
+
+    if (!batches.empty())
+        m_pickerDirty = true;
 }
 
 void MainScreen::startFullLoad()
@@ -421,6 +535,12 @@ void MainScreen::startFullLoad()
     m_model.initial_load_complete.store(false);
     m_model.is_fetching = true;
     m_model.startFetch();
+
+    // Reset picking state — trigger a full rebuild from scratch on next update
+    m_hoveredMapEntity = -1;
+    m_hoveredTimelineEntity = -1;
+    m_lastPickerEntityCount = std::numeric_limits<size_t>::max(); // force n < count → full rebuild
+    m_pickerDirty = true;
 
     if (m_backendType == BackendType::Http) {
         auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());

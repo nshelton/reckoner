@@ -27,7 +27,7 @@ inline double tileYToLat(double y, int zoom) {
 }
 
 inline int zoomForExtent(double halfExtentDeg, int screenHeightPx) {
-    double degreesPerPixel = (halfExtentDeg * 2.0) / screenHeightPx;
+    double degreesPerPixel = (halfExtentDeg  * 4) / screenHeightPx;
     for (int z = 18; z >= 0; --z) {
         double tileDegPerPx = (360.0 / (1 << z)) / 256.0;
         if (tileDegPerPx >= degreesPerPixel)

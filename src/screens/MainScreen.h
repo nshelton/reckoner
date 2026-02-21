@@ -10,6 +10,7 @@
 #include "Backend.h"
 #include "FakeBackend.h"
 #include "HttpBackend.h"
+#include "EntityPicker.h"
 #include <memory>
 #include <future>
 #include <string>
@@ -64,6 +65,13 @@ private:
     ViewportRect m_timelineViewport;
     bool m_mapViewportValid{false};
     bool m_timelineViewportValid{false};
+
+    // Entity picking
+    EntityPicker m_picker;
+    bool   m_pickerDirty{true};
+    size_t m_lastPickerEntityCount{0};  // how many entities are already in the index
+    int m_hoveredMapEntity{-1};
+    int m_hoveredTimelineEntity{-1};
 
     // FPS tracking
     double m_frameTimeAccum{0.0};

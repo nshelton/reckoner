@@ -14,10 +14,11 @@ void Camera::setSize(int width, int height)
     m_height = height;
     m_aspect = static_cast<float>(width) / static_cast<float>(height);
 
-    Vec2 center = Vec2(m_left + (m_right - m_left) * 0.5f, (m_bottom + m_top) * 0.5f);
+    Vec2 center = Vec2((m_left + m_right) * 0.5f, (m_bottom + m_top) * 0.5f);
 
-    m_left = center.x - m_aspect * m_zoom;
-    m_right = center.x + m_aspect * m_zoom;
+    float lonH = lonHalf(center.y);
+    m_left = center.x - lonH;
+    m_right = center.x + lonH;
     m_bottom = center.y - m_zoom;
     m_top = center.y + m_zoom;
 
@@ -28,10 +29,13 @@ void Camera::setSize(int width, int height)
 
 
 void Camera::move(Vec2 delta) {
-    m_left += delta.x;
-    m_right += delta.x;
-    m_bottom += delta.y;
-    m_top += delta.y;
+    Vec2 newCenter((m_left + m_right) * 0.5f + delta.x,
+                   (m_bottom + m_top) * 0.5f + delta.y);
+    float lonH = lonHalf(newCenter.y);
+    m_left   = newCenter.x - lonH;
+    m_right  = newCenter.x + lonH;
+    m_bottom = newCenter.y - m_zoom;
+    m_top    = newCenter.y + m_zoom;
     m_viewTransform.setOrtho(m_left, m_right, m_bottom, m_top);
 }
 
@@ -44,8 +48,9 @@ void Camera::reset() {
     // Reset zoom to initial value
     m_zoom = 0.15f;
 
-    m_left = center.x - m_aspect * m_zoom;
-    m_right = center.x + m_aspect * m_zoom;
+    float lonH = lonHalf(center.y);
+    m_left = center.x - lonH;
+    m_right = center.x + lonH;
     m_bottom = center.y - m_zoom;
     m_top = center.y + m_zoom;
 
@@ -75,11 +80,12 @@ void Camera::zoomAtPixel(const Vec2 &px, float wheelSteps)
 
     // choose new center so anchor stays fixed under cursor
     Vec2 newCenter;
-    newCenter.x = anchor.x - ndc.x * m_aspect * m_zoom;
     newCenter.y = anchor.y - ndc.y * m_zoom;
+    float lonH = lonHalf(newCenter.y);
+    newCenter.x = anchor.x - ndc.x * lonH;
 
-    m_left   = newCenter.x - m_aspect * m_zoom;
-    m_right  = newCenter.x + m_aspect * m_zoom;
+    m_left   = newCenter.x - lonH;
+    m_right  = newCenter.x + lonH;
     m_bottom = newCenter.y - m_zoom;
     m_top    = newCenter.y + m_zoom;
 

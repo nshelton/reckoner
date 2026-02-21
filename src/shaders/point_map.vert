@@ -40,19 +40,24 @@ void main() {
     // Transform geographic position to NDC
     vec3 center_ndc = u_viewProjection * vec3(in_geo_pos, 1.0);
 
-    // Apply size offset in NDC space (u_size == 1 ≈ 1% of screen height)
-    vec2 offset_ndc = in_quad_vertex * u_size * 0.01;
-    offset_ndc.x /= u_aspectRatio;
-
-    gl_Position = vec4(center_ndc.xy + offset_ndc, 0.0, 1.0);
-    v_coord = in_quad_vertex;
-
     // Map time to [0,1] for turbo colormap; out-of-range → muted grey
     float range = u_timeMax - u_timeMin;
     float t = (range > 0.0) ? (in_time_mid - u_timeMin) / range : -1.0;
 
-    if (t < 0.0 || t > 1.0)
-        v_color = vec4(0.1, 0.1, 0.1, 0.5);
-    else
+    float sizeScale =  0.01;
+    if (t < 0.0 || t > 1.0){
+        v_color = vec4(0.1, 0.1, 0.1, 0.1);
+        sizeScale *= 0.5;
+
+    } else {
         v_color = vec4(turbo(t), 0.5);
+    }
+
+
+    // Apply size offset in NDC space (u_size == 1 ≈ 1% of screen height)
+    vec2 offset_ndc = in_quad_vertex * u_size * sizeScale;
+    offset_ndc.x /= u_aspectRatio;
+
+    gl_Position = vec4(center_ndc.xy + offset_ndc, 0.0, 1.0);
+    v_coord = in_quad_vertex;
 }

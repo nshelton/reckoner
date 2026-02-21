@@ -50,6 +50,8 @@ public:
         m_zoom = 3600.0 * 12.0;
     }
 
+    void setCenter(double t) { m_center = t; }
+
     double center() const { return m_center; }
     double zoom() const { return m_zoom; }
     int width() const { return m_width; }

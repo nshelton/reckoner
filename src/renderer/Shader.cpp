@@ -223,6 +223,11 @@ void Shader::setInt(const char* name, int v) const {
     if (loc >= 0) glUniform1i(loc, v);
 }
 
+void Shader::setVec4(const char* name, float x, float y, float z, float w) const {
+    GLint loc = glGetUniformLocation(m_program, name);
+    if (loc >= 0) glUniform4f(loc, x, y, z, w);
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
