@@ -398,6 +398,14 @@ void MainScreen::onGui()
         if (ImGui::Checkbox("Histogram", &histogramEnabled)) {
             m_timelineRenderer.setHistogramEnabled(histogramEnabled);
         }
+        bool solarAltEnabled = m_timelineRenderer.solarAltitudeEnabled();
+        if (ImGui::Checkbox("Solar Altitude", &solarAltEnabled)) {
+            m_timelineRenderer.setSolarAltitudeEnabled(solarAltEnabled);
+        }
+        bool moonAltEnabled = m_timelineRenderer.moonAltitudeEnabled();
+        if (ImGui::Checkbox("Moon Altitude", &moonAltEnabled)) {
+            m_timelineRenderer.setMoonAltitudeEnabled(moonAltEnabled);
+        }
 
         ImGui::Separator();
         ImGui::Text("Rendering:");
