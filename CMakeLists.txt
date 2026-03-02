@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 project(reckoner LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -33,32 +33,33 @@ target_include_directories(imgui PUBLIC
 )
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
 
-# Collect all source files
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
-  src/*.cpp
-)
-
-# Create executable
-add_executable(reckoner ${SRC_FILES})
-
-# Include directories
-target_include_directories(reckoner PRIVATE src external/stb)
-
-# Link libraries
-target_link_libraries(reckoner PRIVATE
-  glfw
-  OpenGL::GL
-  imgui
-  CURL::libcurl
-  nlohmann_json::nlohmann_json
-)
-
-# Inject the absolute path to the shader source directory so shaders can be
-# loaded from disk at runtime without copying them to the build directory.
-# Override by passing -DSHADER_BASE_DIR=<path> to cmake.
+# Shader path (can be overridden with -DSHADER_BASE_DIR=<path>)
 if(NOT DEFINED SHADER_BASE_DIR)
   set(SHADER_BASE_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
 endif()
+
+# Collect all sources, excluding the old hot-reload plumbing
+file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS src/*.cpp)
+list(REMOVE_ITEM ALL_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HotLoader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/PluginMain.cpp
+)
+
+add_executable(reckoner ${ALL_SRCS})
+
+target_include_directories(reckoner PRIVATE
+    src
+    external/stb
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
 target_compile_definitions(reckoner PRIVATE
-  SHADER_BASE_DIR="${SHADER_BASE_DIR}"
+    SHADER_BASE_DIR="${SHADER_BASE_DIR}"
+)
+target_link_libraries(reckoner PRIVATE
+    imgui
+    glfw
+    OpenGL::GL
+    CURL::libcurl
+    nlohmann_json::nlohmann_json
 )

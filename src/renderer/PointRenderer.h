@@ -36,9 +36,11 @@ public:
     void updateChunk(size_t chunkIndex, const PointVertex* data, size_t count);
 
     // --- Draw paths ---
-    /// Map view: transforms geo_pos with viewProjection
+    /// Map view: transforms geo_pos with viewProjection.
+    /// colorMode: 0=turbo colormap, 1=solid baseColor (r,g,b,a).
     void drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks,
-                     float timeMin = 0.0f, float timeMax = 1.0f);
+                     float timeMin = 0.0f, float timeMax = 1.0f,
+                     int colorMode = 0, float br = 1, float bg = 1, float bb = 1, float ba = 1);
 
     /// Map viewport bounds passed to the timeline shader so it can dim points outside the map view
     struct MapExtent {
@@ -48,8 +50,12 @@ public:
 
     /// Timeline view: transforms (time_mid, render_offset) with viewProjection.
     /// Points whose geo_pos falls outside mapExtent are desaturated.
+    /// colorMode: 0=turbo colormap, 1=solid baseColor (r,g,b,a).
+    /// yOffset: screen-space NDC Y shift applied after projection (positive = up).
     void drawForTimeline(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks,
-                         float timeMin, float timeMax, const MapExtent& mapExtent);
+                         float timeMin, float timeMax, const MapExtent& mapExtent,
+                         int colorMode = 0, float br = 1, float bg = 1, float bb = 1, float ba = 1,
+                         float yOffset = 0.0f);
 
     // --- Stats ---
     size_t pointCount() const;

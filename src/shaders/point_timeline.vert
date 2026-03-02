@@ -48,6 +48,13 @@ uniform float u_mapMaxLat;
 //   1 = in-map only     (full color foreground layer, drawn on top)
 uniform int u_filterMode;
 
+// Layer color override: 0=turbo colormap, 1=solid u_baseColor
+uniform int  u_colorMode;
+uniform vec4 u_baseColor;
+
+// Screen-space Y shift applied after projection (NDC units, positive = up)
+uniform float u_yOffset;
+
 void main() {
     bool inMapView = in_geo_pos.x >= u_mapMinLon && in_geo_pos.x <= u_mapMaxLon &&
                      in_geo_pos.y >= u_mapMinLat && in_geo_pos.y <= u_mapMaxLat;
@@ -68,7 +75,7 @@ void main() {
     vec2 offset_ndc = in_quad_vertex * u_size * 0.05;
     offset_ndc.x /= u_aspectRatio;
 
-    gl_Position = vec4(center_ndc.xy + offset_ndc, 0.0, 1.0);
+    gl_Position = vec4(center_ndc.xy + offset_ndc + vec2(0.0, u_yOffset), 0.0, 1.0);
     v_coord = in_quad_vertex;
 
     // Time-based color
@@ -77,6 +84,15 @@ void main() {
 
     if (t < 0.0 || t > 1.0) {
         v_color = vec4(0.1, 0.1, 0.1, 0.5);
+    } else if (u_colorMode == 1) {
+        if (inMapView) {
+            // In-map (pass 1): full solid color
+            v_color = u_baseColor;
+        } else {
+            // Out-of-map or no GPS (pass 0): dim tint — same hue, much lower alpha,
+            // matching the visual weight of GPS gray out-of-map dots.
+            v_color = vec4(u_baseColor.rgb, u_baseColor.a * 0.08);
+        }
     } else if (!inMapView) {
         // Out-of-map: gray (this branch only runs in pass 0)
         v_color = vec4(0.5, 0.5, 0.5, 0.04);

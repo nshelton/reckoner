@@ -11,6 +11,20 @@
 			"group": "build",
 			"problemMatcher": [],
 			"detail": "CMake template build task"
+		},
+		{
+			"type": "cmake",
+			"label": "CMake: reload plugin",
+			"command": "build",
+			"targets": [
+				"reckoner_plugin"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [],
+			"detail": "Rebuild only the hot-reload plugin (.so)"
 		}
 	]
 }

@@ -2,6 +2,8 @@
 
 #include <string>
 #include <functional>
+#include <vector>
+#include <cstdint>
 #include <nlohmann/json.hpp>
 
 /// Simple HTTP client for making POST requests to the backend
@@ -39,8 +41,13 @@ public:
     void get_stream(const std::string& url,
                     std::function<bool(const std::string&)> line_callback);
 
+    /// Fetch raw bytes from a GET request (for binary content such as images).
+    /// Sends the X-API-Key header if configured. Throws on network/HTTP errors.
+    std::vector<uint8_t> get_bytes(const std::string& url);
+
 private:
     static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp);
+    static size_t bytes_write_callback(void* contents, size_t size, size_t nmemb, void* userp);
     static size_t stream_write_callback(void* contents, size_t size, size_t nmemb, void* userp);
     std::string m_apiKey;
 };

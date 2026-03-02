@@ -6,14 +6,25 @@
 #include "renderer/LineRenderer.h"
 #include "renderer/PointRenderer.h"
 #include "tiles/TileRenderer.h"
+#include "tiles/RasterTileRenderer.h"
 #include "Interaction.h"
 #include "AppModel.h"
 #include "Camera.h"
 
-#include <iostream>
 #include <vector>
+#include <memory>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
+
+/// Which tile layer to display behind entities.
+enum class TileMode {
+    None = 0,          ///< No map tiles
+    Vector,            ///< Vector tiles (Versatiles OSM lines) — default
+    OSM,               ///< OpenStreetMap raster (labeled)
+    CartoDB_Light,     ///< CartoDB Positron — light theme with labels
+    CartoDB_Dark,      ///< CartoDB Dark Matter — dark theme with labels
+};
+
 
 /// High-level rendering coordinator
 /// Delegates to specialized renderers (LineRenderer, etc.)
@@ -39,31 +50,35 @@ public:
     void setLineWidth(float w) { m_lines.setLineWidth(w); }
     float lineWidth() const { return m_lines.lineWidth(); }
 
-    void setPointSize(float size) { m_points.setPointSize(size); }
-    float pointSize() const { return m_points.getPointSize(); }
+    void setPointSize(float size);
+    float pointSize() const { return m_pointSize; }
 
-    void setTilesEnabled(bool enabled) { m_tilesEnabled = enabled; }
-    bool tilesEnabled() const { return m_tilesEnabled; }
+    void setTileMode(TileMode mode);
+    TileMode tileMode() const { return m_tileMode; }
 
-    // Shared access to the point renderer (used by TimelineRenderer)
-    PointRenderer& points() { return m_points; }
+    // Access per-layer point renderer (used by TimelineRenderer)
+    PointRenderer* layerRenderer(size_t layerIndex);
+    size_t numLayerRenderers() const { return m_layerPoints.size(); }
 
     // Debug/stats
     int totalVertices() const { return static_cast<int>(m_lines.totalVertices()); }
-    int totalPoints() const { return static_cast<int>(m_points.pointCount()); }
+    int totalPoints() const;
 
 private:
-    float m_pointSize = 0.4;
-    bool m_tilesEnabled = true;
+    float m_pointSize = 0.4f;
+    TileMode m_tileMode = TileMode::Vector;
     LineRenderer m_lines{};
-    PointRenderer m_points{};
     TileRenderer m_tiles{};
+    RasterTileRenderer m_rasterTiles{};
 
-    // Track how many entities have been uploaded to GPU chunks
-    size_t m_lastEntityCount = 0;
+    // One PointRenderer per layer (grown to match model.layers on demand)
+    std::vector<std::unique_ptr<PointRenderer>> m_layerPoints;
+    std::vector<size_t> m_layerEntityCounts;  // dirty-check per layer
+
     std::vector<PointVertex> m_chunkBuildBuf;  // Reusable scratch buffer
 
     void renderGrid(const Camera &camera, const AppModel &model);
     void renderEntities(const Camera &camera, const AppModel &model);
-    void rebuildChunk(size_t chunkIndex, const AppModel &model);
+    void ensureLayerRenderer(size_t layerIndex);
+    void rebuildLayerChunk(size_t layerIndex, size_t chunkIndex, const Layer &layer);
 };

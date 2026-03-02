@@ -2,8 +2,8 @@
 
 #include "core/Entity.h"
 #include "core/Color.h"
-#include "core/RingBuffer.h"
 #include <string>
+#include <vector>
 #include <chrono>
 
 /// A layer corresponds to one entity type (e.g. "location.gps", "photo").
@@ -12,7 +12,9 @@ struct Layer {
     std::string name;  // entity type string, e.g. "location.gps"
     bool visible = true;
     Color color{1.0f, 0.0f, 0.0f, 0.3f};
-    RingBuffer<Entity, 50000> entities;
+    int colorMode = 0;            // 0=turbo colormap, 1=solid layer color
+    float yOffset = 0.0f;         // NDC Y offset applied post-projection (screen-space shift)
+    std::vector<Entity> entities;
 
     // Per-layer fetch state
     bool is_fetching = false;

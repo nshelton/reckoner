@@ -1,6 +1,7 @@
 #include <iostream>
 #include <curl/curl.h>
 #include "app/App.h"
+#include "AppModel.h"
 #include "screens/MainScreen.h"
 
 int main()
@@ -10,7 +11,8 @@ int main()
 
     try {
         App app(1920, 1080, "Reckoner");
-        MainScreen screen;
+        AppModel model;
+        MainScreen screen(&model);
         app.run(screen);
     }
     catch (const std::exception& e) {

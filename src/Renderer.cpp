@@ -6,26 +6,80 @@
 
 static constexpr float kPi = 3.14159265358979323846f;
 
+static const char* rasterUrlForMode(TileMode mode) {
+    switch (mode) {
+        case TileMode::OSM:
+            return "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+        case TileMode::CartoDB_Light:
+            return "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
+        case TileMode::CartoDB_Dark:
+            return "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+        default:
+            return nullptr;
+    }
+}
+
 Renderer::Renderer()
 {
    m_lines.init();
    m_tiles.init();
+   m_rasterTiles.init();
    m_chunkBuildBuf.reserve(PointRenderer::CHUNK_SIZE);
+}
+
+void Renderer::setTileMode(TileMode mode) {
+    m_tileMode = mode;
+    const char* url = rasterUrlForMode(mode);
+    if (url) {
+        m_rasterTiles.setUrlTemplate(url);
+    }
+}
+
+void Renderer::setPointSize(float size) {
+    m_pointSize = size;
+    for (auto& pr : m_layerPoints)
+        if (pr) pr->setPointSize(size);
+}
+
+int Renderer::totalPoints() const {
+    int total = 0;
+    for (const auto& pr : m_layerPoints)
+        if (pr) total += static_cast<int>(pr->pointCount());
+    return total;
+}
+
+PointRenderer* Renderer::layerRenderer(size_t layerIndex) {
+    if (layerIndex < m_layerPoints.size())
+        return m_layerPoints[layerIndex].get();
+    return nullptr;
+}
+
+void Renderer::ensureLayerRenderer(size_t layerIndex) {
+    while (m_layerPoints.size() <= layerIndex) {
+        auto pr = std::make_unique<PointRenderer>();
+        pr->setPointSize(m_pointSize);
+        m_layerPoints.push_back(std::move(pr));
+        m_layerEntityCounts.push_back(0);
+    }
 }
 
 void Renderer::render(const Camera &camera, const AppModel &model, const InteractionState &uiState)
 {
    m_lines.clear();
 
-   // Vector tile lines (drawn first as background layer)
-   if (m_tilesEnabled) {
-      m_tiles.render(camera, m_lines);
+   // Tile background layer (drawn before entities)
+   if (m_tileMode == TileMode::Vector) {
+      m_tiles.render(camera);
+   } else if (m_tileMode == TileMode::OSM ||
+              m_tileMode == TileMode::CartoDB_Light ||
+              m_tileMode == TileMode::CartoDB_Dark) {
+      m_rasterTiles.render(camera);
    }
 
    renderGrid(camera, model);
    m_lines.draw(camera.Transform());
 
-   // Render entities as points
+   // Render entities as points, one layer at a time
    renderEntities(camera, model);
 }
 
@@ -33,6 +87,7 @@ void Renderer::shutdown()
 {
    m_lines.shutdown();
    m_tiles.shutdown();
+   m_rasterTiles.shutdown();
 }
 
 void Renderer::renderGrid(const Camera &camera, const AppModel &model)
@@ -75,25 +130,31 @@ void Renderer::renderGrid(const Camera &camera, const AppModel &model)
    }
 }
 
-void Renderer::rebuildChunk(size_t chunkIndex, const AppModel &model)
+void Renderer::rebuildLayerChunk(size_t layerIndex, size_t chunkIndex, const Layer &layer)
 {
    m_chunkBuildBuf.clear();
 
    size_t start = chunkIndex * PointRenderer::CHUNK_SIZE;
-   size_t end = std::min(start + PointRenderer::CHUNK_SIZE, model.entities.size());
+   size_t end = std::min(start + PointRenderer::CHUNK_SIZE, layer.entities.size());
 
    for (size_t i = start; i < end; i++) {
-      const auto& entity = model.entities[i];
-      if (!entity.has_location()) continue;
+      const auto& entity = layer.entities[i];
+
+      // Entities without GPS use a sentinel far outside any map view.
+      // On the map: the sentinel projects off-screen and is GPU-clipped (invisible).
+      // On the timeline: the sentinel is treated as "out of map view" (gray/muted pass).
+      Vec2 geo = entity.has_location()
+          ? Vec2(static_cast<float>(*entity.lon), static_cast<float>(*entity.lat))
+          : Vec2(-9999.0f, -9999.0f);
 
       m_chunkBuildBuf.push_back({
-          Vec2(static_cast<float>(*entity.lon), static_cast<float>(*entity.lat)),
+          geo,
           static_cast<float>(entity.time_mid()),
           entity.render_offset
       });
    }
 
-   m_points.updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());
+   m_layerPoints[layerIndex]->updateChunk(chunkIndex, m_chunkBuildBuf.data(), m_chunkBuildBuf.size());
 }
 
 void Renderer::drawMapHighlight(const Camera &camera, double lon, double lat)
@@ -128,31 +189,39 @@ void Renderer::drawMapHighlight(const Camera &camera, double lon, double lat)
 
 void Renderer::renderEntities(const Camera &camera, const AppModel &model)
 {
-   size_t entityCount = model.entities.size();
-
-   if (entityCount == 0) return;
-
-   size_t numActiveChunks = (entityCount + PointRenderer::CHUNK_SIZE - 1) / PointRenderer::CHUNK_SIZE;
-
-   // Only rebuild chunks that contain newly added entities
-   if (entityCount != m_lastEntityCount) {
-      // Ensure GPU buffers exist for all needed chunks
-      m_points.ensureChunks(numActiveChunks);
-
-      // If data was cleared and refilled, rebuild from scratch
-      size_t firstDirtyChunk = (entityCount > m_lastEntityCount)
-         ? m_lastEntityCount / PointRenderer::CHUNK_SIZE
-         : 0;
-
-      for (size_t c = firstDirtyChunk; c < numActiveChunks; c++) {
-         rebuildChunk(c, model);
-      }
-
-      m_lastEntityCount = entityCount;
-   }
-
    float aspectRatio = static_cast<float>(camera.width()) / static_cast<float>(camera.height());
    float timeMin = static_cast<float>(model.time_extent.start);
    float timeMax = static_cast<float>(model.time_extent.end);
-   m_points.drawChunked(camera.Transform(), aspectRatio, numActiveChunks, timeMin, timeMax);
+
+   for (size_t li = 0; li < model.layers.size(); ++li) {
+      const Layer& layer = model.layers[li];
+      if (!layer.visible) continue;
+
+      size_t entityCount = layer.entities.size();
+      if (entityCount == 0) continue;
+
+      ensureLayerRenderer(li);
+      PointRenderer& pr = *m_layerPoints[li];
+
+      size_t numActiveChunks = (entityCount + PointRenderer::CHUNK_SIZE - 1) / PointRenderer::CHUNK_SIZE;
+
+      // Only rebuild chunks that contain newly added entities
+      if (entityCount != m_layerEntityCounts[li]) {
+         pr.ensureChunks(numActiveChunks);
+
+         size_t firstDirtyChunk = (entityCount > m_layerEntityCounts[li])
+            ? m_layerEntityCounts[li] / PointRenderer::CHUNK_SIZE
+            : 0;
+
+         for (size_t c = firstDirtyChunk; c < numActiveChunks; c++) {
+            rebuildLayerChunk(li, c, layer);
+         }
+
+         m_layerEntityCounts[li] = entityCount;
+      }
+
+      pr.drawChunked(camera.Transform(), aspectRatio, numActiveChunks, timeMin, timeMax,
+                     layer.colorMode,
+                     layer.color.r, layer.color.g, layer.color.b, layer.color.a);
+   }
 }

@@ -30,8 +30,25 @@ public:
         std::function<void(std::vector<Entity>&&)> batch_callback
     );
 
+    /// Fetch all entities of this type via /v1/query/time with the given time range.
+    /// Calls batch_callback once with all results (up to 100k). For photos and other
+    /// type-filtered datasets that don't have a streaming export endpoint.
+    void streamAllByType(
+        double startTime,
+        double endTime,
+        std::function<void(std::vector<Entity>&&)> batch_callback
+    );
+
     /// Cancel an in-progress fetchAllEntities loop
     void cancelFetch() { m_cancelled.store(true); }
+
+    /// Fetch thumbnail image bytes for a photo entity. Blocking; call from a thread.
+    std::vector<uint8_t> fetchPhotoThumb(const std::string& entityId) {
+        return m_api->fetch_photo_thumb(entityId);
+    }
+
+    /// The configured API key (for building URLs externally if needed).
+    const std::string& apiKey() const { return m_api->apiKey(); }
 
     /// Fetch server statistics from /stats endpoint
     ServerStats fetchStats() { return m_api->fetch_stats(); }

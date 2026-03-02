@@ -16,8 +16,9 @@ public:
     void shutdown();
 
     /// Render grid lines + labels + histogram + entities (call within glViewport/glScissor context).
-    /// points is the shared PointRenderer owned by Renderer (map view).
-    void render(const TimelineCamera& camera, const AppModel& model, PointRenderer& points);
+    /// layerRenderers is a parallel array to model.layers — one PointRenderer* per layer.
+    void render(const TimelineCamera& camera, const AppModel& model,
+                const std::vector<PointRenderer*>& layerRenderers);
 
     int  histogramBins() const { return m_histogramBins; }
     void setHistogramBins(int n) { m_histogramBins = n; }
@@ -57,5 +58,6 @@ private:
     void renderHistogram(const TimelineCamera& camera, const AppModel& model);
     void renderSolarAltitude(const TimelineCamera& camera, const AppModel& model);
     void renderMoonAltitude(const TimelineCamera& camera, const AppModel& model);
-    void renderEntities(const TimelineCamera& camera, const AppModel& model, PointRenderer& points);
+    void renderEntities(const TimelineCamera& camera, const AppModel& model,
+                        const std::vector<PointRenderer*>& layerRenderers);
 };

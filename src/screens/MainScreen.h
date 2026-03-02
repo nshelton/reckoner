@@ -4,22 +4,25 @@
 #include <imgui.h>
 #include "Camera.h"
 #include "Renderer.h"
+#include "Interaction.h"
 #include "TimelineCamera.h"
 #include "TimelineRenderer.h"
 #include "AppModel.h"
 #include "Backend.h"
 #include "FakeBackend.h"
 #include "HttpBackend.h"
-#include "EntityPicker.h"
 #include <memory>
 #include <future>
 #include <string>
 #include <mutex>
 #include <deque>
+#include <vector>
 
 class MainScreen : public IScreen
 {
 public:
+    explicit MainScreen(AppModel* model);
+
     void onAttach(App &app) override;
     void onResize(int width, int height) override;
     void onUpdate(double dt) override;
@@ -39,21 +42,27 @@ private:
     InteractionController m_interaction{};
     TimelineCamera m_timelineCamera{};
     TimelineRenderer m_timelineRenderer{};
-    AppModel m_model{};
+    AppModel* m_model{nullptr};
 
-    // Backend
-    std::unique_ptr<Backend> m_backend;
-    std::future<void> m_pendingFetch;
+    // Backends — one per layer
+    // layers[0] = GPS (location.gps), layers[1] = Photos (photo)
+    std::unique_ptr<Backend> m_backend;        // GPS
+    std::unique_ptr<Backend> m_photoBackend;   // Photos
+    std::future<void> m_pendingGpsFetch;
+    std::future<void> m_pendingPhotoFetch;
 
-    // Thread-safe batch delivery (background thread → main thread)
+    // Thread-safe tagged batch delivery (background thread → main thread)
+    struct PendingBatch {
+        int layerIndex;
+        std::vector<Entity> entities;
+    };
     std::mutex m_batchMutex;
-    std::deque<std::vector<Entity>> m_completedBatches;
+    std::deque<PendingBatch> m_completedBatches;
 
     // Backend configuration
     enum class BackendType { Fake, Http };
     BackendType m_backendType = BackendType::Http;
     char m_backendUrl[256] = "http://n3k0.local:8000";
-    char m_entityType[128] = "location.gps";
 
     // Cached window sizes
     ImVec2 m_lastMapSize{0, 0};
@@ -65,13 +74,6 @@ private:
     ViewportRect m_timelineViewport;
     bool m_mapViewportValid{false};
     bool m_timelineViewportValid{false};
-
-    // Entity picking
-    EntityPicker m_picker;
-    bool   m_pickerDirty{true};
-    size_t m_lastPickerEntityCount{0};  // how many entities are already in the index
-    int m_hoveredMapEntity{-1};
-    int m_hoveredTimelineEntity{-1};
 
     // FPS tracking
     double m_frameTimeAccum{0.0};

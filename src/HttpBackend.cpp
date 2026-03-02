@@ -40,6 +40,24 @@ void HttpBackend::fetchEntities(
     }
 }
 
+void HttpBackend::streamAllByType(
+    double startTime,
+    double endTime,
+    std::function<void(std::vector<Entity>&&)> batch_callback
+) {
+    static constexpr int LIMIT = 100000;
+    try {
+        TimeExtent time{startTime, endTime};
+        auto entities = m_api->fetch_time(m_entityType, time, LIMIT, "t_start_asc");
+        std::cerr << "HttpBackend: streamAllByType got " << entities.size()
+                  << " entities of type '" << m_entityType << "'" << std::endl;
+        if (!entities.empty())
+            batch_callback(std::move(entities));
+    } catch (const std::exception& e) {
+        std::cerr << "HttpBackend: streamAllByType failed: " << e.what() << std::endl;
+    }
+}
+
 void HttpBackend::streamAllEntities(
     std::function<void(size_t)> on_total,
     std::function<void(std::vector<Entity>&&)> batch_callback

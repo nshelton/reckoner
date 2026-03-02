@@ -10,6 +10,14 @@ size_t HttpClient::write_callback(void* contents, size_t size, size_t nmemb, voi
     return total_size;
 }
 
+size_t HttpClient::bytes_write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
+    size_t total = size * nmemb;
+    auto* buf = static_cast<std::vector<uint8_t>*>(userp);
+    const uint8_t* data = static_cast<const uint8_t*>(contents);
+    buf->insert(buf->end(), data, data + total);
+    return total;
+}
+
 namespace {
     struct StreamContext {
         std::string buffer;
@@ -37,6 +45,44 @@ size_t HttpClient::stream_write_callback(void* contents, size_t size, size_t nme
     }
 
     return total;
+}
+
+std::vector<uint8_t> HttpClient::get_bytes(const std::string& url) {
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("Failed to initialize CURL");
+
+    std::vector<uint8_t> buf;
+    buf.reserve(256 * 1024);  // 256 KB initial reserve for thumbnails
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, bytes_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+
+    struct curl_slist* headers = nullptr;
+    if (!m_apiKey.empty()) {
+        std::string auth_header = "X-API-Key: " + m_apiKey;
+        headers = curl_slist_append(headers, auth_header.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    }
+
+    CURLcode res = curl_easy_perform(curl);
+    if (headers) curl_slist_free_all(headers);
+
+    if (res != CURLE_OK) {
+        curl_easy_cleanup(curl);
+        throw std::runtime_error(std::string("CURL get_bytes failed: ") + curl_easy_strerror(res));
+    }
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+
+    if (http_code < 200 || http_code >= 300)
+        throw std::runtime_error("HTTP get_bytes failed with code " + std::to_string(http_code));
+
+    return buf;
 }
 
 void HttpClient::get_stream(const std::string& url,

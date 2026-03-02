@@ -4,6 +4,7 @@
 #include "core/TimeExtent.h"
 #include "core/Vec2.h"
 #include "core/RingBuffer.h"
+#include "Layer.h"
 #include <vector>
 #include <array>
 #include <chrono>
@@ -28,14 +29,14 @@ struct SpatialExtent {
 };
 
 /// Central application state
-/// Contains entities, extents, and performance stats
+/// Contains layers (each with their own entities), extents, and performance stats
 class AppModel {
 public:
     SpatialExtent spatial_extent;  // Geographic bounds for map view
     TimeExtent time_extent{0.0, 1770348932};  // Default: 1970 - now
 
-    // Entity storage - all entities loaded into memory
-    std::vector<Entity> entities;
+    // Layer storage — layers[0] = location.gps, layers[1] = photo
+    std::vector<Layer> layers;
 
     // Loading progress
     std::atomic<size_t> total_expected{0};     // From server stats
@@ -43,23 +44,28 @@ public:
 
     // Stats tracking
     LatencyRingBuffer<50> fetch_latencies;  // Last 50 fetch latencies in ms
-    std::chrono::steady_clock::time_point last_fetch_start;
-    bool is_fetching = false;
 
-    // Methods
-    void startFetch() {
-        last_fetch_start = std::chrono::steady_clock::now();
-        is_fetching = true;
+    AppModel() {
+        // GPS layer — uses turbo colormap (colorMode=0)
+        Layer gps;
+        gps.name      = "location.gps";
+        gps.colorMode = 0;  // turbo
+        gps.color     = Color{1.0f, 1.0f, 1.0f, 0.5f};
+        layers.push_back(std::move(gps));
+
+        // Photo layer — solid gold (colorMode=1), shifted up 20% in timeline
+        Layer photos;
+        photos.name      = "photo";
+        photos.colorMode = 1;  // solid
+        photos.color     = Color{1.0f, 0.843f, 0.0f, 0.7f};
+        photos.yOffset   = 0.4f;  // 20% of NDC height above GPS layer
+        layers.push_back(std::move(photos));
     }
 
-    void endFetch() {
-        auto end = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - last_fetch_start);
-        fetch_latencies.push(static_cast<float>(duration.count()));
-        is_fetching = false;
+    // Convenience: find a layer by name (-1 if not found)
+    int layerIndex(const std::string& name) const {
+        for (int i = 0; i < (int)layers.size(); ++i)
+            if (layers[i].name == name) return i;
+        return -1;
     }
-
-    // Future additions:
-    // std::vector<std::unique_ptr<Layer>> layers;
-    // Entity* selected_entity;
 };

@@ -136,12 +136,16 @@ Entity BackendAPI::parse_entity(const nlohmann::json& j) {
         e.time_end = TimeUtils::parse_iso8601(j["t_end"].get<std::string>());
     }
 
-    if (!j["lat"].is_null()) e.lat = j["lat"].get<double>();
-    if (!j["lon"].is_null()) e.lon = j["lon"].get<double>();
-    if (!j["name"].is_null()) e.name = j["name"].get<std::string>();
-    if (!j["render_offset"].is_null()) e.render_offset = j["render_offset"].get<float>();
+    if (j.contains("lat")  && !j["lat"].is_null())  e.lat  = j["lat"].get<double>();
+    if (j.contains("lon")  && !j["lon"].is_null())  e.lon  = j["lon"].get<double>();
+    if (j.contains("name") && !j["name"].is_null()) e.name = j["name"].get<std::string>();
+    e.render_offset = j.value("render_offset", 0.0f);
 
     return e;
+}
+
+std::vector<uint8_t> BackendAPI::fetch_photo_thumb(const std::string& entity_id) {
+    return http_client_.get_bytes(base_url_ + "/v1/photo/" + entity_id + "/thumb");
 }
 
 std::vector<Entity> BackendAPI::parse_entities(const nlohmann::json& json_array) {

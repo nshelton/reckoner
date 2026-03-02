@@ -13,14 +13,14 @@ struct TickLevel
 };
 
 static const TickLevel kTickLevels[] = {
-    {1.0,        "%H:%M:%S"},    // 1 second
-    {10.0,       "%H:%M:%S"},    // 10 seconds
-    {60.0,       "%H:%M"},       // 1 minute
-    {600.0,      "%H:%M"},       // 10 minutes
-    {3600.0,     "%H:%M"},       // 1 hour
-    {21600.0,    "%b %d %Hh"},   // 6 hours — e.g. "Dec 19 06h"
-    {86400.0,    "%a %b %d"},    // 1 day   — e.g. "Thu Dec 19"  (weekday added)
-    {604800.0,   "%b %d"},       // 1 week
+    {1.0,        "%I:%M:%S%p"},    // 1 second
+    {10.0,       "%I:%M:%S%p"},    // 10 seconds
+    {60.0,       "%I:%M%p"},       // 1 minute
+    {600.0,      "%I:%M%p"},       // 10 minutes
+    {3600.0,     "%I%p"},       // 1 hour
+    {21600.0,    "%I%p"},   // 6 hours — e.g. "Dec 19 06h"
+    {86400.0,    "%a%d"},    // 1 day   — e.g. "Thu Dec 19"  (weekday added)
+    {604800.0,   "%b%d"},       // 1 week
     {2592000.0,  "%B %Y"},       // 1 month — e.g. "December 2024" (full name)
     {31536000.0, "%Y"},          // 1 year
 };
@@ -78,7 +78,7 @@ void TimelineRenderer::shutdown()
 }
 
 void TimelineRenderer::render(const TimelineCamera& camera, const AppModel& model,
-                               PointRenderer& points)
+                               const std::vector<PointRenderer*>& layerRenderers)
 {
     // Derive local-time display offset from the center longitude of the spatial extent.
     // This makes all tick labels, weekend shading, and day boundaries show local solar time
@@ -94,7 +94,7 @@ void TimelineRenderer::render(const TimelineCamera& camera, const AppModel& mode
     renderGrid(camera);             // manages its own clear/draw per level
     renderLabels(camera);
     renderHistogram(camera, model);
-    renderEntities(camera, model, points);
+    renderEntities(camera, model, layerRenderers);
     renderEdgeLabels(camera);       // pinned corner date labels — over histogram, under cursor
     renderCursor(camera);           // drawn last so it sits on top of everything
 }
@@ -278,10 +278,13 @@ void TimelineRenderer::renderEdgeLabels(const TimelineCamera& camera)
 
 void TimelineRenderer::renderHistogram(const TimelineCamera& camera, const AppModel& model)
 {
-    if (!m_histogramEnabled || model.entities.empty()) return;
+    if (!m_histogramEnabled) return;
+
+    // Use GPS layer (index 0) for the histogram
+    if (model.layers.empty() || model.layers[0].entities.empty()) return;
 
     TimeExtent visible = camera.getTimeExtent();
-    m_histogram.draw(camera.getTransform(), model.entities,
+    m_histogram.draw(camera.getTransform(), model.layers[0].entities,
                      visible.start, visible.end, m_histogramBins);
 }
 
@@ -308,13 +311,8 @@ void TimelineRenderer::renderMoonAltitude(const TimelineCamera& camera, const Ap
 }
 
 void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppModel& model,
-                                       PointRenderer& points)
+                                       const std::vector<PointRenderer*>& layerRenderers)
 {
-    if (model.entities.empty()) return;
-
-    size_t numChunks = (model.entities.size() + PointRenderer::CHUNK_SIZE - 1)
-                       / PointRenderer::CHUNK_SIZE;
-
     float aspect = static_cast<float>(camera.width()) / 100.0f;
     TimeExtent visible = camera.getTimeExtent();
     float tMin = static_cast<float>(visible.start);
@@ -326,7 +324,20 @@ void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppMod
         static_cast<float>(model.spatial_extent.min_lat),
         static_cast<float>(model.spatial_extent.max_lat)
     };
-    points.drawForTimeline(camera.getTransform(), aspect, numChunks, tMin, tMax, mapExtent);
+
+    for (size_t li = 0; li < model.layers.size() && li < layerRenderers.size(); ++li) {
+        const Layer& layer = model.layers[li];
+        PointRenderer* pr = layerRenderers[li];
+        if (!layer.visible || !pr || layer.entities.empty()) continue;
+
+        size_t numChunks = (layer.entities.size() + PointRenderer::CHUNK_SIZE - 1)
+                           / PointRenderer::CHUNK_SIZE;
+
+        pr->drawForTimeline(camera.getTransform(), aspect, numChunks, tMin, tMax, mapExtent,
+                            layer.colorMode,
+                            layer.color.r, layer.color.g, layer.color.b, layer.color.a,
+                            layer.yOffset);
+    }
 }
 
 void TimelineRenderer::renderCursor(const TimelineCamera& camera)

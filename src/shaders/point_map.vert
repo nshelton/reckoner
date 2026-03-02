@@ -36,6 +36,10 @@ uniform float u_timeMin;
 uniform float u_timeMax;
 uniform float u_size;
 
+// Layer color override: 0=turbo colormap, 1=solid u_baseColor
+uniform int  u_colorMode;
+uniform vec4 u_baseColor;
+
 void main() {
     // Transform geographic position to NDC
     vec3 center_ndc = u_viewProjection * vec3(in_geo_pos, 1.0);
@@ -44,15 +48,15 @@ void main() {
     float range = u_timeMax - u_timeMin;
     float t = (range > 0.0) ? (in_time_mid - u_timeMin) / range : -1.0;
 
-    float sizeScale =  0.01;
-    if (t < 0.0 || t > 1.0){
+    float sizeScale = 0.01;
+    if (t < 0.0 || t > 1.0) {
         v_color = vec4(0.1, 0.1, 0.1, 0.1);
         sizeScale *= 0.5;
-
+    } else if (u_colorMode == 1) {
+        v_color = u_baseColor;
     } else {
         v_color = vec4(turbo(t), 0.5);
     }
-
 
     // Apply size offset in NDC space (u_size == 1 ≈ 1% of screen height)
     vec2 offset_ndc = in_quad_vertex * u_size * sizeScale;
