@@ -66,6 +66,7 @@ TimelineRenderer::TimelineRenderer()
     m_histogram.init();
     m_solarAltitude.init();
     m_moonAltitude.init();
+    m_calendar.init();
 }
 
 void TimelineRenderer::shutdown()
@@ -75,6 +76,7 @@ void TimelineRenderer::shutdown()
     m_histogram.shutdown();
     m_solarAltitude.shutdown();
     m_moonAltitude.shutdown();
+    m_calendar.shutdown();
 }
 
 void TimelineRenderer::render(const TimelineCamera& camera, const AppModel& model,
@@ -327,8 +329,17 @@ void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppMod
 
     for (size_t li = 0; li < model.layers.size() && li < layerRenderers.size(); ++li) {
         const Layer& layer = model.layers[li];
+        if (!layer.visible || layer.entities.empty()) continue;
+
+        // Calendar events use a dedicated rect renderer: per-entity color + duration width.
+        if (layer.name == "calendar.event") {
+            m_calendar.draw(camera.getTransform(), layer.entities,
+                            layer.yOffset, camera.width());
+            continue;
+        }
+
         PointRenderer* pr = layerRenderers[li];
-        if (!layer.visible || !pr || layer.entities.empty()) continue;
+        if (!pr) continue;
 
         size_t numChunks = (layer.entities.size() + PointRenderer::CHUNK_SIZE - 1)
                            / PointRenderer::CHUNK_SIZE;
@@ -336,7 +347,7 @@ void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppMod
         pr->drawForTimeline(camera.getTransform(), aspect, numChunks, tMin, tMax, mapExtent,
                             layer.colorMode,
                             layer.color.r, layer.color.g, layer.color.b, layer.color.a,
-                            layer.yOffset);
+                            layer.yOffset, layer.shape);
     }
 }
 

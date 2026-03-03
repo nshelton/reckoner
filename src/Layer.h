@@ -13,6 +13,7 @@ struct Layer {
     bool visible = true;
     Color color{1.0f, 0.0f, 0.0f, 0.3f};
     int colorMode = 0;            // 0=turbo colormap, 1=solid layer color
+    int shape = 0;                // 0=circle, 1=square
     float yOffset = 0.0f;         // NDC Y offset applied post-projection (screen-space shift)
     std::vector<Entity> entities;
 

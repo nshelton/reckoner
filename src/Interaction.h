@@ -6,7 +6,11 @@
 #include "EntityPicker.h"
 #include <vector>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <string>
+#include <future>
+#include <functional>
 
 class AppModel;
 
@@ -56,20 +60,56 @@ public:
     PickResult selected()        const { return m_selected; }
     const InteractionState& state() const { return m_state; }
 
+    // --- Photo thumbnail loading ---
+    /// Set by MainScreen after constructing the photo backend.
+    /// The fetcher is a blocking function called on a background thread.
+    /// Clear it (pass {}) before destroying the backend it captures.
+    void setPhotoFetcher(std::function<std::vector<uint8_t>(const std::string& entityId)> f) {
+        m_photoFetcher = std::move(f);
+    }
+
+    /// Call each frame from onUpdate — non-blocking check; uploads texture to GL if ready.
+    void drainPhotoTexture();
+
+    /// Block until the current thumbnail fetch completes. Call before destroying
+    /// the backend that the fetcher function captures.
+    void waitForPhotoFetch();
+
+    /// Block on any pending fetch, then delete the GL texture. Call from onDetach.
+    void shutdown();
+
     // --- ImGui rendering ---
-    void drawDetailsPanel(const AppModel& model);   // non-const: deselect button mutates state
+    void drawDetailsPanel(const AppModel& model);   // non-const: deselect button + photo fetch
 
 private:
     InteractionState m_state;
 
+    // Pickers
     std::vector<EntityPicker> m_pickers;
     std::vector<size_t>       m_lastEntityCounts;
     bool                      m_pickersDirty{true};
 
+    // Hover / selection
     PickResult m_hoveredMap{};
     PickResult m_hoveredTimeline{};
     PickResult m_selected{};
 
+    // Photo thumbnail
+    struct PhotoTexture {
+        unsigned int texture{0};   // GLuint — unsigned int avoids GL header in .h
+        int          texW{0};
+        int          texH{0};
+        bool         loading{false};
+        std::string  forEntityId;  // entity whose texture is loaded/loading
+        std::future<std::vector<uint8_t>> pendingFetch;
+    };
+    PhotoTexture m_photoTexture;
+    std::function<std::vector<uint8_t>(const std::string&)> m_photoFetcher;
+
+    void maybeStartPhotoFetch(const AppModel& model);
+    void clearPhotoTexture();   // deletes GL texture, resets struct (call from main thread)
+
+    // Internal pick helpers
     void ensurePickers(size_t count);
     PickResult pickMap(const Camera& camera, Vec2 localPx, const AppModel& model) const;
     PickResult pickTimeline(const TimelineCamera& camera, float localX, float localY, float panelHeight, const AppModel& model) const;

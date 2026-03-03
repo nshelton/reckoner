@@ -45,11 +45,15 @@ private:
     AppModel* m_model{nullptr};
 
     // Backends — one per layer
-    // layers[0] = GPS (location.gps), layers[1] = Photos (photo)
-    std::unique_ptr<Backend> m_backend;        // GPS
-    std::unique_ptr<Backend> m_photoBackend;   // Photos
+    // layers[0] = GPS, layers[1] = Photos, layers[2] = Calendar, layers[3] = Google Timeline
+    std::unique_ptr<Backend> m_backend;                // GPS
+    std::unique_ptr<Backend> m_photoBackend;           // Photos
+    std::unique_ptr<Backend> m_calendarBackend;        // Calendar
+    std::unique_ptr<Backend> m_googleTimelineBackend;  // Google Timeline
     std::future<void> m_pendingGpsFetch;
     std::future<void> m_pendingPhotoFetch;
+    std::future<void> m_pendingCalendarFetch;
+    std::future<void> m_pendingGoogleTimelineFetch;
 
     // Thread-safe tagged batch delivery (background thread → main thread)
     struct PendingBatch {

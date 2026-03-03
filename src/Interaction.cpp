@@ -5,6 +5,14 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+
+#include <stb_image.h>  // implementation compiled in RasterTileCache.cpp
 
 // ---- Spatial index management ----
 
@@ -16,6 +24,7 @@ void InteractionController::resetPickers()
     m_hoveredTimeline = {};
     m_selected        = {};
     m_pickersDirty    = true;
+    clearPhotoTexture();  // selection cleared; drop stale texture from previous session
 }
 
 void InteractionController::ensurePickers(size_t count)
@@ -111,6 +120,7 @@ void InteractionController::onMapClick(const Camera& camera, Vec2 localPx, const
     PickResult pick = pickMap(camera, localPx, model);
     if (pick.valid())
         m_selected = pick;
+    maybeStartPhotoFetch(model);
 }
 
 void InteractionController::onMapDoubleClick(TimelineCamera& timeline, const Camera& camera, Vec2 localPx, const AppModel& model)
@@ -151,6 +161,7 @@ void InteractionController::onTimelineClick(const TimelineCamera& camera, float 
     PickResult pick = pickTimeline(camera, localX, localY, panelHeight, model);
     if (pick.valid())
         m_selected = pick;
+    maybeStartPhotoFetch(model);
 }
 
 void InteractionController::onTimelineDoubleClick(Camera& map, const TimelineCamera& camera, float localX, float localY, float panelHeight, const AppModel& model)
@@ -165,6 +176,110 @@ void InteractionController::onTimelineDoubleClick(Camera& map, const TimelineCam
 void InteractionController::onTimelineUnhovered()
 {
     m_hoveredTimeline = {};
+}
+
+// ---- Photo thumbnail ----
+
+void InteractionController::clearPhotoTexture()
+{
+    if (m_photoTexture.texture != 0) {
+        glDeleteTextures(1, &m_photoTexture.texture);
+        m_photoTexture.texture = 0;
+        m_photoTexture.texW    = 0;
+        m_photoTexture.texH    = 0;
+    }
+    m_photoTexture.forEntityId.clear();
+    m_photoTexture.loading = false;
+}
+
+void InteractionController::waitForPhotoFetch()
+{
+    if (m_photoTexture.pendingFetch.valid())
+        m_photoTexture.pendingFetch.wait();
+}
+
+void InteractionController::shutdown()
+{
+    waitForPhotoFetch();
+    clearPhotoTexture();
+}
+
+void InteractionController::maybeStartPhotoFetch(const AppModel& model)
+{
+    if (!m_selected.valid() || !m_photoFetcher) {
+        clearPhotoTexture();
+        return;
+    }
+
+    const auto& layer = model.layers[m_selected.layerIndex];
+    if (layer.name != "photo") {
+        clearPhotoTexture();
+        return;
+    }
+
+    const auto& e = layer.entities[m_selected.entityIndex];
+    if (m_photoTexture.forEntityId == e.id)
+        return;  // already loaded or loading for this entity
+
+    // Detach any still-running previous fetch (backend is still alive, safe to discard)
+    if (m_photoTexture.pendingFetch.valid()) {
+        std::thread([f = std::move(m_photoTexture.pendingFetch)]() mutable {
+            f.wait();
+        }).detach();
+    }
+    clearPhotoTexture();
+
+    m_photoTexture.forEntityId = e.id;
+    m_photoTexture.loading     = true;
+
+    std::string eid     = e.id;
+    auto        fetcher = m_photoFetcher;  // capture by value so the lambda is self-contained
+    m_photoTexture.pendingFetch = std::async(std::launch::async,
+        [fetcher, eid]() -> std::vector<uint8_t> {
+            return fetcher(eid);
+        });
+}
+
+void InteractionController::drainPhotoTexture()
+{
+    if (!m_photoTexture.loading || !m_photoTexture.pendingFetch.valid())
+        return;
+
+    if (m_photoTexture.pendingFetch.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+
+    std::vector<uint8_t> bytes = m_photoTexture.pendingFetch.get();
+    m_photoTexture.loading = false;
+
+    if (bytes.empty()) {
+        std::cerr << "[Photo] fetch returned empty bytes for " << m_photoTexture.forEntityId << "\n";
+        return;
+    }
+
+    int w = 0, h = 0, channels = 0;
+    unsigned char* pixels = stbi_load_from_memory(
+        bytes.data(), static_cast<int>(bytes.size()),
+        &w, &h, &channels, 4);  // force RGBA
+
+    if (!pixels) {
+        std::cerr << "[Photo] stbi_load failed: " << stbi_failure_reason() << "\n";
+        return;
+    }
+
+    unsigned int tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(pixels);
+
+    m_photoTexture.texture = tex;
+    m_photoTexture.texW    = w;
+    m_photoTexture.texH    = h;
 }
 
 // ---- Formatting helpers ----
@@ -362,6 +477,23 @@ void InteractionController::drawDetailsPanel(const AppModel& model)
     ImGui::SameLine();
     if (ImGui::SmallButton("Copy##id"))
         ImGui::SetClipboardText(e.id.c_str());
+
+    // ── Photo thumbnail ───────────────────────────────────────────────────────
+    if (layer.name == "photo") {
+        ImGui::Separator();
+        if (m_photoTexture.loading) {
+            ImGui::TextDisabled("Loading image...");
+        } else if (m_photoTexture.texture != 0) {
+            float avail  = ImGui::GetContentRegionAvail().x;
+            float aspect = (m_photoTexture.texW > 0)
+                ? static_cast<float>(m_photoTexture.texH) / static_cast<float>(m_photoTexture.texW)
+                : 1.0f;
+            ImGui::Image((ImTextureID)(intptr_t)m_photoTexture.texture,
+                         ImVec2(avail, avail * aspect));
+        } else if (!m_photoTexture.forEntityId.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed to load image.");
+        }
+    }
 
     ImGui::End();
 }

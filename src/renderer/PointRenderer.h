@@ -40,7 +40,8 @@ public:
     /// colorMode: 0=turbo colormap, 1=solid baseColor (r,g,b,a).
     void drawChunked(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks,
                      float timeMin = 0.0f, float timeMax = 1.0f,
-                     int colorMode = 0, float br = 1, float bg = 1, float bb = 1, float ba = 1);
+                     int colorMode = 0, float br = 1, float bg = 1, float bb = 1, float ba = 1,
+                     int shape = 0);
 
     /// Map viewport bounds passed to the timeline shader so it can dim points outside the map view
     struct MapExtent {
@@ -55,7 +56,7 @@ public:
     void drawForTimeline(const Mat3& viewProjection, float aspectRatio, size_t numActiveChunks,
                          float timeMin, float timeMax, const MapExtent& mapExtent,
                          int colorMode = 0, float br = 1, float bg = 1, float bb = 1, float ba = 1,
-                         float yOffset = 0.0f);
+                         float yOffset = 0.0f, int shape = 0);
 
     // --- Stats ---
     size_t pointCount() const;

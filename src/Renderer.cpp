@@ -222,6 +222,7 @@ void Renderer::renderEntities(const Camera &camera, const AppModel &model)
 
       pr.drawChunked(camera.Transform(), aspectRatio, numActiveChunks, timeMin, timeMax,
                      layer.colorMode,
-                     layer.color.r, layer.color.g, layer.color.b, layer.color.a);
+                     layer.color.r, layer.color.g, layer.color.b, layer.color.a,
+                     layer.shape);
    }
 }

@@ -35,7 +35,7 @@ public:
     SpatialExtent spatial_extent;  // Geographic bounds for map view
     TimeExtent time_extent{0.0, 1770348932};  // Default: 1970 - now
 
-    // Layer storage — layers[0] = location.gps, layers[1] = photo
+    // Layer storage — layers[0] = location.gps, layers[1] = photo, layers[2] = calendar.event, layers[3] = location.googletimeline
     std::vector<Layer> layers;
 
     // Loading progress
@@ -53,13 +53,30 @@ public:
         gps.color     = Color{1.0f, 1.0f, 1.0f, 0.5f};
         layers.push_back(std::move(gps));
 
-        // Photo layer — solid gold (colorMode=1), shifted up 20% in timeline
+        // Photo layer — solid gold (colorMode=1), shifted up in timeline
         Layer photos;
         photos.name      = "photo";
         photos.colorMode = 1;  // solid
         photos.color     = Color{1.0f, 0.843f, 0.0f, 0.7f};
-        photos.yOffset   = 0.4f;  // 20% of NDC height above GPS layer
+        photos.yOffset   = 0.4f;
         layers.push_back(std::move(photos));
+
+        // Calendar layer — solid green (colorMode=1), shifted down in timeline
+        Layer calendar;
+        calendar.name      = "calendar.event";
+        calendar.colorMode = 1;  // solid
+        calendar.color     = Color{0.298f, 0.686f, 0.314f, 0.8f};  // #4CAF50
+        calendar.yOffset   = -0.4f;
+        layers.push_back(std::move(calendar));
+
+        // Google Timeline layer — solid Google blue, square points, shifted up
+        Layer googleTimeline;
+        googleTimeline.name      = "location.googletimeline";
+        googleTimeline.colorMode = 1;  // solid
+        googleTimeline.shape     = 1;  // square
+        googleTimeline.color     = Color{0.102f, 0.451f, 0.910f, 0.7f};  // #1A73E8
+        googleTimeline.yOffset   = 0.2f;
+        layers.push_back(std::move(googleTimeline));
     }
 
     // Convenience: find a layer by name (-1 if not found)

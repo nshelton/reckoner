@@ -106,7 +106,8 @@ void PointRenderer::drawChunkLoop(size_t numActiveChunks) {
 
 void PointRenderer::drawChunked(const Mat3& viewProjection, float aspectRatio,
                                  size_t numActiveChunks, float timeMin, float timeMax,
-                                 int colorMode, float br, float bg, float bb, float ba) {
+                                 int colorMode, float br, float bg, float bb, float ba,
+                                 int shape) {
     if (numActiveChunks == 0) return;
 
     m_mapShader.use();
@@ -117,6 +118,7 @@ void PointRenderer::drawChunked(const Mat3& viewProjection, float aspectRatio,
     m_mapShader.setFloat("u_size",           m_size);
     m_mapShader.setInt  ("u_colorMode",      colorMode);
     m_mapShader.setVec4 ("u_baseColor",      br, bg, bb, ba);
+    m_mapShader.setInt  ("u_shape",          shape);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -129,7 +131,7 @@ void PointRenderer::drawForTimeline(const Mat3& viewProjection, float aspectRati
                                      size_t numActiveChunks, float timeMin, float timeMax,
                                      const MapExtent& mapExtent,
                                      int colorMode, float br, float bg, float bb, float ba,
-                                     float yOffset) {
+                                     float yOffset, int shape) {
     if (numActiveChunks == 0) return;
 
     // Set all uniforms once — u_filterMode will be changed between passes
@@ -146,6 +148,7 @@ void PointRenderer::drawForTimeline(const Mat3& viewProjection, float aspectRati
     m_timelineShader.setInt  ("u_colorMode",      colorMode);
     m_timelineShader.setVec4 ("u_baseColor",      br, bg, bb, ba);
     m_timelineShader.setFloat("u_yOffset",        yOffset);
+    m_timelineShader.setInt  ("u_shape",          shape);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

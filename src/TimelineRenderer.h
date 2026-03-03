@@ -7,6 +7,7 @@
 #include "renderer/HistogramRenderer.h"
 #include "renderer/SolarAltitudeRenderer.h"
 #include "renderer/MoonAltitudeRenderer.h"
+#include "renderer/CalendarRenderer.h"
 #include "AppModel.h"
 
 class TimelineRenderer
@@ -42,6 +43,7 @@ private:
     HistogramRenderer     m_histogram;
     SolarAltitudeRenderer m_solarAltitude;
     MoonAltitudeRenderer  m_moonAltitude;
+    CalendarRenderer      m_calendar;
     int                   m_histogramBins        = 100;
     bool                  m_histogramEnabled     = true;
     bool                  m_solarAltitudeEnabled = false;

@@ -136,9 +136,10 @@ Entity BackendAPI::parse_entity(const nlohmann::json& j) {
         e.time_end = TimeUtils::parse_iso8601(j["t_end"].get<std::string>());
     }
 
-    if (j.contains("lat")  && !j["lat"].is_null())  e.lat  = j["lat"].get<double>();
-    if (j.contains("lon")  && !j["lon"].is_null())  e.lon  = j["lon"].get<double>();
-    if (j.contains("name") && !j["name"].is_null()) e.name = j["name"].get<std::string>();
+    if (j.contains("lat")   && !j["lat"].is_null())   e.lat   = j["lat"].get<double>();
+    if (j.contains("lon")   && !j["lon"].is_null())   e.lon   = j["lon"].get<double>();
+    if (j.contains("name")  && !j["name"].is_null())  e.name  = j["name"].get<std::string>();
+    if (j.contains("color") && !j["color"].is_null()) e.color = j["color"].get<std::string>();
     e.render_offset = j.value("render_offset", 0.0f);
 
     return e;

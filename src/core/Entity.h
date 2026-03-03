@@ -18,6 +18,7 @@ struct Entity {
 
     // Display
     std::optional<std::string> name;
+    std::optional<std::string> color;  // hex string e.g. "#4CAF50", set by ingesters
     float render_offset = 0.0f;  // vertical offset for timeline stacking
 
     // Helpers
