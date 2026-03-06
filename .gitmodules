@@ -1,3 +1,0 @@
-[submodule "external/spatiotemporal_db"]
-	path = external/spatiotemporal_db
-	url = https://github.com/nshelton/spatiotemporal_db
