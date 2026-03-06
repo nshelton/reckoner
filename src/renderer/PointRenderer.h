@@ -9,13 +9,20 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+/// Fixed geographic reference subtracted from all geo_pos values before upload.
+/// Storing (lon - kRefLon, lat - kRefLat) instead of raw (lon, lat) keeps the
+/// values near zero, where float has ~60× better precision than at ±118/34.
+/// Both the map view-projection matrix and the timeline mapExtent uniforms must
+/// use the same relative coordinate space.
+static constexpr double kRefLon = -118.0;
+static constexpr double kRefLat =  34.0;
+
 /// Vertex data for a single point instance.
-/// Stores both coordinate spaces so the same VBO can be drawn by the map
-/// and the timeline using different shaders.
+/// geo_pos stores (lon - kRefLon, lat - kRefLat) — see kRefLon/kRefLat above.
 struct PointVertex {
-    Vec2  geo_pos;       // (lon, lat)               — map shader, attrib 1
-    float time_mid;      // (time_start+time_end)/2  — timeline x + color, attrib 2
-    float render_offset; // entity.render_offset      — timeline y, attrib 3
+    Vec2  geo_pos;       // (lon-kRefLon, lat-kRefLat) — map shader, attrib 1
+    float time_mid;      // (time_start+time_end)/2    — timeline x + color, attrib 2
+    float render_offset; // entity.render_offset        — timeline y, attrib 3
 };
 
 /// GPU-accelerated point renderer using instanced rendering.

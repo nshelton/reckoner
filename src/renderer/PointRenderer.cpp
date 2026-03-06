@@ -121,7 +121,7 @@ void PointRenderer::drawChunked(const Mat3& viewProjection, float aspectRatio,
     m_mapShader.setInt  ("u_shape",          shape);
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     drawChunkLoop(numActiveChunks);
     glDisable(GL_BLEND);
     glUseProgram(0);
@@ -151,7 +151,7 @@ void PointRenderer::drawForTimeline(const Mat3& viewProjection, float aspectRati
     m_timelineShader.setInt  ("u_shape",          shape);
 
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
     // Pass 1: out-of-map points (gray) drawn first so they sit behind in-map color
     m_timelineShader.setInt("u_filterMode", 0);

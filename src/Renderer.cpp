@@ -143,8 +143,11 @@ void Renderer::rebuildLayerChunk(size_t layerIndex, size_t chunkIndex, const Lay
       // Entities without GPS use a sentinel far outside any map view.
       // On the map: the sentinel projects off-screen and is GPU-clipped (invisible).
       // On the timeline: the sentinel is treated as "out of map view" (gray/muted pass).
+      // Subtract the fixed reference before casting to float so that the stored
+      // values are small (≈ ±1°) and float has ~0.013m precision instead of ~0.7m.
       Vec2 geo = entity.has_location()
-          ? Vec2(static_cast<float>(*entity.lon), static_cast<float>(*entity.lat))
+          ? Vec2(static_cast<float>(*entity.lon - kRefLon),
+                 static_cast<float>(*entity.lat - kRefLat))
           : Vec2(-9999.0f, -9999.0f);
 
       m_chunkBuildBuf.push_back({
@@ -193,6 +196,16 @@ void Renderer::renderEntities(const Camera &camera, const AppModel &model)
    float timeMin = static_cast<float>(model.time_extent.start);
    float timeMax = static_cast<float>(model.time_extent.end);
 
+   // Build a view-projection matrix for REF-relative coordinates.
+   // VBOs store (lon - kRefLon, lat - kRefLat) so the ortho bounds must be
+   // shifted by the same offset; this is computed in double to avoid cancellation.
+   Mat3 relativeVP;
+   relativeVP.setOrtho(
+       static_cast<float>(camera.lonLeft()   - kRefLon),
+       static_cast<float>(camera.lonRight()  - kRefLon),
+       static_cast<float>(camera.latBottom() - kRefLat),
+       static_cast<float>(camera.latTop()    - kRefLat));
+
    for (size_t li = 0; li < model.layers.size(); ++li) {
       const Layer& layer = model.layers[li];
       if (!layer.visible) continue;
@@ -220,7 +233,7 @@ void Renderer::renderEntities(const Camera &camera, const AppModel &model)
          m_layerEntityCounts[li] = entityCount;
       }
 
-      pr.drawChunked(camera.Transform(), aspectRatio, numActiveChunks, timeMin, timeMax,
+      pr.drawChunked(relativeVP, aspectRatio, numActiveChunks, timeMin, timeMax,
                      layer.colorMode,
                      layer.color.r, layer.color.g, layer.color.b, layer.color.a,
                      layer.shape);

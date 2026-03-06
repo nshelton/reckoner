@@ -50,14 +50,14 @@ public:
         Layer gps;
         gps.name      = "location.gps";
         gps.colorMode = 0;  // turbo
-        gps.color     = Color{1.0f, 1.0f, 1.0f, 0.5f};
+        gps.color     = Color{1.0f, 1.0f, 1.0f, 0.06f};
         layers.push_back(std::move(gps));
 
         // Photo layer — solid gold (colorMode=1), shifted up in timeline
         Layer photos;
         photos.name      = "photo";
         photos.colorMode = 1;  // solid
-        photos.color     = Color{1.0f, 0.843f, 0.0f, 0.7f};
+        photos.color     = Color{1.0f, 0.843f, 0.0f, 0.35f};
         photos.yOffset   = 0.4f;
         layers.push_back(std::move(photos));
 
@@ -65,7 +65,7 @@ public:
         Layer calendar;
         calendar.name      = "calendar.event";
         calendar.colorMode = 1;  // solid
-        calendar.color     = Color{0.298f, 0.686f, 0.314f, 0.8f};  // #4CAF50
+        calendar.color     = Color{0.298f, 0.686f, 0.314f, 0.4f};  // #4CAF50
         calendar.yOffset   = -0.4f;
         layers.push_back(std::move(calendar));
 
@@ -74,7 +74,7 @@ public:
         googleTimeline.name      = "location.googletimeline";
         googleTimeline.colorMode = 1;  // solid
         googleTimeline.shape     = 1;  // square
-        googleTimeline.color     = Color{0.102f, 0.451f, 0.910f, 0.7f};  // #1A73E8
+        googleTimeline.color     = Color{0.102f, 0.451f, 0.910f, 0.35f};  // #1A73E8
         googleTimeline.yOffset   = 0.2f;
         layers.push_back(std::move(googleTimeline));
     }

@@ -295,6 +295,8 @@ void MainScreen::onGui()
                 ImGui::Text("%s: %zu (loading...)", layer.name.c_str(), count);
             else
                 ImGui::Text("%s: %zu", layer.name.c_str(), count);
+            ImGui::SetNextItemWidth(-1);
+            ImGui::SliderFloat("##alpha", &layer.color.a, 0.0f, 1.0f, "alpha %.3f");
             ImGui::PopID();
         }
 

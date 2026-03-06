@@ -55,7 +55,7 @@ void main() {
     } else if (u_colorMode == 1) {
         v_color = u_baseColor;
     } else {
-        v_color = vec4(turbo(t), 0.5);
+        v_color = vec4(turbo(t), u_baseColor.a);
     }
 
     // Apply size offset in NDC space (u_size == 1 ≈ 1% of screen height)

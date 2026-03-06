@@ -320,11 +320,13 @@ void TimelineRenderer::renderEntities(const TimelineCamera& camera, const AppMod
     float tMin = static_cast<float>(visible.start);
     float tMax = static_cast<float>(visible.end);
 
+    // geo_pos in VBOs is stored relative to kRefLon/kRefLat, so the mapExtent
+    // bounds must use the same relative offset for the in-map/out-of-map test.
     PointRenderer::MapExtent mapExtent{
-        static_cast<float>(model.spatial_extent.min_lon),
-        static_cast<float>(model.spatial_extent.max_lon),
-        static_cast<float>(model.spatial_extent.min_lat),
-        static_cast<float>(model.spatial_extent.max_lat)
+        static_cast<float>(model.spatial_extent.min_lon - kRefLon),
+        static_cast<float>(model.spatial_extent.max_lon - kRefLon),
+        static_cast<float>(model.spatial_extent.min_lat - kRefLat),
+        static_cast<float>(model.spatial_extent.max_lat - kRefLat)
     };
 
     for (size_t li = 0; li < model.layers.size() && li < layerRenderers.size(); ++li) {

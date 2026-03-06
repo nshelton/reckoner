@@ -95,9 +95,9 @@ void main() {
         }
     } else if (!inMapView) {
         // Out-of-map: gray (this branch only runs in pass 0)
-        v_color = vec4(0.5, 0.5, 0.5, 0.04);
+        v_color = vec4(0.5, 0.5, 0.5, u_baseColor.a * 0.67);
     } else {
         // In-map: full turbo color (this branch only runs in pass 1)
-        v_color = vec4(turbo(t), 0.5);
+        v_color = vec4(turbo(t), u_baseColor.a);
     }
 }
