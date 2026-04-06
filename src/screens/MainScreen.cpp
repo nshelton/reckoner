@@ -29,6 +29,8 @@ MainScreen::MainScreen(AppModel* model)
 void MainScreen::onAttach(App &app)
 {
     m_app = &app;
+    m_renderer.init();
+    m_timelineRenderer.init();
     switchBackend(m_backendType);
 }
 

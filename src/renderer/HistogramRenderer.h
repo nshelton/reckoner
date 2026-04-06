@@ -7,8 +7,17 @@
 #include <vector>
 
 #define GL_GLEXT_PROTOTYPES
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#else
 #include <GL/glext.h>
+#endif
 
 /// Renders a histogram overlay on the timeline view.
 ///

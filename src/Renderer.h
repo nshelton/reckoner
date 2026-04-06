@@ -14,7 +14,12 @@
 #include <vector>
 #include <memory>
 #define GL_GLEXT_PROTOTYPES
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
 
 /// Which tile layer to display behind entities.
 enum class TileMode {
@@ -32,6 +37,7 @@ class Renderer
 {
 public:
     Renderer();
+    void init();
     void shutdown();
 
     void setSize(int width, int height)

@@ -1,6 +1,11 @@
 #pragma once
 
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
 #include <GLFW/glfw3.h>
 
 #include <string>

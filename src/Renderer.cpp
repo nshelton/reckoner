@@ -21,10 +21,14 @@ static const char* rasterUrlForMode(TileMode mode) {
 
 Renderer::Renderer()
 {
+   m_chunkBuildBuf.reserve(PointRenderer::CHUNK_SIZE);
+}
+
+void Renderer::init()
+{
    m_lines.init();
    m_tiles.init();
    m_rasterTiles.init();
-   m_chunkBuildBuf.reserve(PointRenderer::CHUNK_SIZE);
 }
 
 void Renderer::setTileMode(TileMode mode) {

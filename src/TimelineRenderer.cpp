@@ -61,6 +61,10 @@ static const double kLabelFadeMax = 200.0;
 
 TimelineRenderer::TimelineRenderer()
 {
+}
+
+void TimelineRenderer::init()
+{
     m_lines.init();
     m_text.init();
     m_histogram.init();

@@ -1,7 +1,16 @@
 // Must define GL_GLEXT_PROTOTYPES before the first GL include in this TU
 #define GL_GLEXT_PROTOTYPES
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#else
 #include <GL/glext.h>
+#endif
 
 #include "tiles/RasterTileRenderer.h"
 #include "tiles/TileMath.h"

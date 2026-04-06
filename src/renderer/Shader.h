@@ -3,8 +3,17 @@
 #include <string>
 
 #define GL_GLEXT_PROTOTYPES
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#else
 #include <GL/glext.h>
+#endif
 
 /// First-class GLSL shader program loaded from files on disk.
 ///

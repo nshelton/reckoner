@@ -7,8 +7,17 @@
 #include <cstdint>
 
 #define GL_GLEXT_PROTOTYPES
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#else
 #include <GL/glext.h>
+#endif
 
 /// GPU-accelerated bitmap text renderer using an embedded 8x8 monospace font.
 /// Glyph anchor positions are in world space (transformed by viewProjection).

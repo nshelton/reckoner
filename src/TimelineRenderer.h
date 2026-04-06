@@ -14,6 +14,7 @@ class TimelineRenderer
 {
 public:
     TimelineRenderer();
+    void init();
     void shutdown();
 
     /// Render grid lines + labels + histogram + entities (call within glViewport/glScissor context).

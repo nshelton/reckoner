@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include "core/Vec2.h"
 #include "core/Mat3.h"
+#include <algorithm>
 #include <cmath>
 
 /// Camera manages the view transformation in geographic coordinates (lat/lon)
