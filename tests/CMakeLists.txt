@@ -17,10 +17,13 @@ add_executable(reckoner_tests
   test_timeline_camera.cpp
   test_picking_logic.cpp
   test_entity_picker.cpp
+  test_fake_backend.cpp
+  test_backend_factory.cpp
 )
 
 target_link_libraries(reckoner_tests PRIVATE
   reckoner_core
+  reckoner_http
   Catch2::Catch2WithMain
 )
 

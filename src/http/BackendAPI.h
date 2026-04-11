@@ -4,19 +4,10 @@
 #include "core/Entity.h"
 #include "core/TimeExtent.h"
 #include "AppModel.h"
+#include "Backend.h"
 #include <vector>
 #include <string>
 #include <functional>
-
-/// Stats returned by the /stats endpoint
-struct ServerStats {
-    int total_entities{0};
-    std::vector<std::pair<std::string, int>> entities_by_type;
-    std::string oldest_time;
-    std::string newest_time;
-    double db_size_mb{0.0};
-    double uptime_seconds{0.0};
-};
 
 /// High-level API for fetching entities from the backend
 class BackendAPI {

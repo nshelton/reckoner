@@ -31,7 +31,7 @@ void MainScreen::onAttach(App &app)
     m_app = &app;
     m_renderer.init();
     m_timelineRenderer.init();
-    switchBackend(m_backendType);
+    switchBackend(m_backendConfig.type);
 }
 
 void MainScreen::onResize(int /*width*/, int /*height*/)
@@ -84,17 +84,7 @@ void MainScreen::onRender()
 
 void MainScreen::onDetach()
 {
-    // Cancel any in-progress fetches
-    if (m_backendType == BackendType::Http) {
-        if (auto* h = dynamic_cast<HttpBackend*>(m_backend.get()))                 h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_photoBackend.get()))            h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_calendarBackend.get()))         h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_googleTimelineBackend.get()))   h->cancelFetch();
-    }
-    if (m_pendingGpsFetch.valid())             m_pendingGpsFetch.wait();
-    if (m_pendingPhotoFetch.valid())           m_pendingPhotoFetch.wait();
-    if (m_pendingCalendarFetch.valid())        m_pendingCalendarFetch.wait();
-    if (m_pendingGoogleTimelineFetch.valid())  m_pendingGoogleTimelineFetch.wait();
+    cancelAndWaitAll();
     m_interaction.shutdown();  // waits for thumbnail fetch, deletes GL texture
 
     m_renderer.shutdown();
@@ -242,15 +232,15 @@ void MainScreen::onGui()
         ImGui::Text("Backend Configuration:");
 
         const char *backend_types[] = {"Fake Data", "HTTP Backend"};
-        int current_type = static_cast<int>(m_backendType);
+        int current_type = static_cast<int>(m_backendConfig.type);
         if (ImGui::Combo("Backend Type", &current_type, backend_types, 2))
-            switchBackend(static_cast<BackendType>(current_type));
+            switchBackend(static_cast<BackendConfig::Type>(current_type));
 
-        if (m_backendType == BackendType::Http)
+        if (m_backendConfig.type == BackendConfig::Type::Http)
         {
             ImGui::InputText("Backend URL", m_backendUrl, sizeof(m_backendUrl));
             if (ImGui::Button("Apply HTTP Config"))
-                switchBackend(BackendType::Http);
+                switchBackend(BackendConfig::Type::Http);
         }
 
         ImGui::Separator();
@@ -490,41 +480,6 @@ void MainScreen::startFullLoad()
 {
     std::cerr << "[LOAD] startFullLoad begin\n";
 
-    // Cancel any in-progress fetches
-    if (m_backendType == BackendType::Http) {
-        if (auto* h = dynamic_cast<HttpBackend*>(m_backend.get()))                h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_photoBackend.get()))           h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_calendarBackend.get()))        h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_googleTimelineBackend.get()))  h->cancelFetch();
-    }
-    if (m_pendingGpsFetch.valid()) {
-        std::cerr << "[LOAD] waiting for GPS fetch to cancel...\n";
-        auto t = Clock::now();
-        m_pendingGpsFetch.wait();
-        std::cerr << "[LOAD] GPS fetch done after " << ms_since(t) << "ms\n";
-    }
-    if (m_pendingPhotoFetch.valid()) {
-        std::cerr << "[LOAD] waiting for photo fetch to cancel...\n";
-        auto t = Clock::now();
-        m_pendingPhotoFetch.wait();
-        std::cerr << "[LOAD] photo fetch done after " << ms_since(t) << "ms\n";
-    }
-    if (m_pendingCalendarFetch.valid()) {
-        std::cerr << "[LOAD] waiting for calendar fetch to cancel...\n";
-        auto t = Clock::now();
-        m_pendingCalendarFetch.wait();
-        std::cerr << "[LOAD] calendar fetch done after " << ms_since(t) << "ms\n";
-    }
-    if (m_pendingGoogleTimelineFetch.valid()) {
-        std::cerr << "[LOAD] waiting for google timeline fetch to cancel...\n";
-        auto t = Clock::now();
-        m_pendingGoogleTimelineFetch.wait();
-        std::cerr << "[LOAD] google timeline fetch done after " << ms_since(t) << "ms\n";
-    }
-
-    // Wait for any in-flight thumbnail before resetting (backend pointer still valid here)
-    m_interaction.waitForPhotoFetch();
-
     // Clear all layer data
     for (auto& layer : m_model->layers) {
         layer.entities.clear();
@@ -535,15 +490,15 @@ void MainScreen::startFullLoad()
 
     m_interaction.resetPickers();
 
-    if (m_backendType == BackendType::Http) {
+    if (m_backendConfig.type == BackendConfig::Type::Http) {
         // --- GPS fetch (streaming NDJSON export) ---
-        auto* gpsBackend = dynamic_cast<HttpBackend*>(m_backend.get());
-        if (gpsBackend) {
+        if (m_backends.gps) {
+            auto* gps = m_backends.gps.get();
             m_model->layers[0].startFetch();
-            m_pendingGpsFetch = std::async(std::launch::async, [this, gpsBackend]() {
+            m_pendingGpsFetch = std::async(std::launch::async, [this, gps]() {
                 std::cerr << "[GPS] stream started\n";
                 size_t batchNum = 0;
-                gpsBackend->streamAllEntities(
+                gps->streamAllEntities(
                     [this](size_t total) {
                         std::cerr << "[GPS] total expected: " << total << "\n";
                         m_model->total_expected.store(total);
@@ -569,70 +524,40 @@ void MainScreen::startFullLoad()
             });
         }
 
-        // --- Photo fetch (time-range query, type-filtered) ---
-        auto* photoBackend = dynamic_cast<HttpBackend*>(m_photoBackend.get());
-        if (photoBackend) {
-            m_model->layers[1].startFetch();
-            m_pendingPhotoFetch = std::async(std::launch::async, [this, photoBackend]() {
-                std::cerr << "[PHOTO] fetch started\n";
-                // Full time range: epoch (1970) to 2033
-                photoBackend->streamAllByType(
-                    0.0, 2000000000.0,
-                    [this](std::vector<Entity>&& batch) {
-                        std::cerr << "[PHOTO] batch size=" << batch.size() << "\n";
-                        auto t = Clock::now();
-                        std::lock_guard<std::mutex> lock(m_batchMutex);
-                        long lockMs = ms_since(t);
-                        if (lockMs > 5)
-                            std::cerr << "[PHOTO] waited " << lockMs << "ms for batchMutex\n";
-                        m_completedBatches.push_back({1, std::move(batch)});
-                    });
-                std::cerr << "[PHOTO] fetch complete\n";
-                m_model->layers[1].endFetch();
-            });
-        }
+        // --- Type-filtered fetches (photo, calendar, google timeline) ---
+        struct TypeFetch {
+            int layerIndex;
+            Backend* backend;
+            std::future<void>* future;
+            const char* tag;
+        };
+        TypeFetch typeFetches[] = {
+            {1, m_backends.photo.get(),          &m_pendingPhotoFetch,           "PHOTO"},
+            {2, m_backends.calendar.get(),       &m_pendingCalendarFetch,        "CALENDAR"},
+            {3, m_backends.googleTimeline.get(),  &m_pendingGoogleTimelineFetch, "GTIMELINE"},
+        };
 
-        // --- Calendar fetch (time-range query, type-filtered) ---
-        auto* calendarBackend = dynamic_cast<HttpBackend*>(m_calendarBackend.get());
-        if (calendarBackend) {
-            m_model->layers[2].startFetch();
-            m_pendingCalendarFetch = std::async(std::launch::async, [this, calendarBackend]() {
-                std::cerr << "[CALENDAR] fetch started\n";
-                calendarBackend->streamAllByType(
+        for (auto& tf : typeFetches) {
+            if (!tf.backend) continue;
+            int li = tf.layerIndex;
+            Backend* be = tf.backend;
+            const char* tag = tf.tag;
+            m_model->layers[li].startFetch();
+            *tf.future = std::async(std::launch::async, [this, be, li, tag]() {
+                std::cerr << "[" << tag << "] fetch started\n";
+                be->streamAllByType(
                     0.0, 2000000000.0,
-                    [this](std::vector<Entity>&& batch) {
-                        std::cerr << "[CALENDAR] batch size=" << batch.size() << "\n";
+                    [this, li, tag](std::vector<Entity>&& batch) {
+                        std::cerr << "[" << tag << "] batch size=" << batch.size() << "\n";
                         auto t = Clock::now();
                         std::lock_guard<std::mutex> lock(m_batchMutex);
                         long lockMs = ms_since(t);
                         if (lockMs > 5)
-                            std::cerr << "[CALENDAR] waited " << lockMs << "ms for batchMutex\n";
-                        m_completedBatches.push_back({2, std::move(batch)});
+                            std::cerr << "[" << tag << "] waited " << lockMs << "ms for batchMutex\n";
+                        m_completedBatches.push_back({li, std::move(batch)});
                     });
-                std::cerr << "[CALENDAR] fetch complete\n";
-                m_model->layers[2].endFetch();
-            });
-        }
-
-        // --- Google Timeline fetch (time-range query, type-filtered) ---
-        auto* gtBackend = dynamic_cast<HttpBackend*>(m_googleTimelineBackend.get());
-        if (gtBackend) {
-            m_model->layers[3].startFetch();
-            m_pendingGoogleTimelineFetch = std::async(std::launch::async, [this, gtBackend]() {
-                std::cerr << "[GTIMELINE] fetch started\n";
-                gtBackend->streamAllByType(
-                    0.0, 2000000000.0,
-                    [this](std::vector<Entity>&& batch) {
-                        std::cerr << "[GTIMELINE] batch size=" << batch.size() << "\n";
-                        auto t = Clock::now();
-                        std::lock_guard<std::mutex> lock(m_batchMutex);
-                        long lockMs = ms_since(t);
-                        if (lockMs > 5)
-                            std::cerr << "[GTIMELINE] waited " << lockMs << "ms for batchMutex\n";
-                        m_completedBatches.push_back({3, std::move(batch)});
-                    });
-                std::cerr << "[GTIMELINE] fetch complete\n";
-                m_model->layers[3].endFetch();
+                std::cerr << "[" << tag << "] fetch complete\n";
+                m_model->layers[li].endFetch();
             });
         }
     } else {
@@ -646,7 +571,7 @@ void MainScreen::startFullLoad()
         fullSpace.max_lon =  180.0;
 
         m_pendingGpsFetch = std::async(std::launch::async, [this, fullTime, fullSpace]() {
-            m_backend->fetchEntities(fullTime, fullSpace,
+            m_backends.gps->fetchEntities(fullTime, fullSpace,
                 [this](std::vector<Entity>&& batch) {
                     std::lock_guard<std::mutex> lock(m_batchMutex);
                     m_completedBatches.push_back({0, std::move(batch)});
@@ -660,53 +585,43 @@ void MainScreen::startFullLoad()
 void MainScreen::fetchServerStats()
 {
     m_hasServerStats = false;
-    if (m_backendType == BackendType::Http) {
-        auto* httpBackend = dynamic_cast<HttpBackend*>(m_backend.get());
-        if (httpBackend) {
-            m_serverStats = httpBackend->fetchStats();
-            m_hasServerStats = true;
-        }
+    if (m_backends.gps) {
+        m_serverStats = m_backends.gps->fetchStats();
+        m_hasServerStats = (m_serverStats.total_entities > 0);
     }
 }
 
-void MainScreen::switchBackend(BackendType type)
+void MainScreen::cancelAndWaitAll()
 {
-    if (m_backendType == BackendType::Http && m_backend) {
-        if (auto* h = dynamic_cast<HttpBackend*>(m_backend.get()))                h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_photoBackend.get()))           h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_calendarBackend.get()))        h->cancelFetch();
-        if (auto* h = dynamic_cast<HttpBackend*>(m_googleTimelineBackend.get()))  h->cancelFetch();
-    }
+    m_backends.cancelAll();
     if (m_pendingGpsFetch.valid())             m_pendingGpsFetch.wait();
     if (m_pendingPhotoFetch.valid())           m_pendingPhotoFetch.wait();
     if (m_pendingCalendarFetch.valid())        m_pendingCalendarFetch.wait();
     if (m_pendingGoogleTimelineFetch.valid())  m_pendingGoogleTimelineFetch.wait();
+}
+
+void MainScreen::switchBackend(BackendConfig::Type type)
+{
+    cancelAndWaitAll();
     // Must wait for thumbnail fetch before destroying the backend it holds a pointer to
     m_interaction.waitForPhotoFetch();
 
-    m_backendType = type;
+    m_backendConfig.type = type;
+    m_backends = createBackends(m_backendConfig, m_backendUrl);
 
-    if (type == BackendType::Fake)
-    {
-        m_backend                = std::make_unique<FakeBackend>(1000);
-        m_photoBackend           = nullptr;
-        m_calendarBackend        = nullptr;
-        m_googleTimelineBackend  = nullptr;
-        m_interaction.setPhotoFetcher({});  // no photo thumbnails in fake mode
-        m_hasServerStats = false;
-    }
-    else
-    {
-        m_backend                = std::make_unique<HttpBackend>(m_backendUrl, "location.gps");
-        m_photoBackend           = std::make_unique<HttpBackend>(m_backendUrl, "photo");
-        m_calendarBackend        = std::make_unique<HttpBackend>(m_backendUrl, "calendar.event");
-        m_googleTimelineBackend  = std::make_unique<HttpBackend>(m_backendUrl, "location.googletimeline");
-        auto* pb = dynamic_cast<HttpBackend*>(m_photoBackend.get());
+    if (m_backends.photo) {
+        Backend* pb = m_backends.photo.get();
         m_interaction.setPhotoFetcher([pb](const std::string& id) -> std::vector<uint8_t> {
-            return pb ? pb->fetchPhotoThumb(id) : std::vector<uint8_t>{};
+            return pb->fetchPhotoThumb(id);
         });
-        fetchServerStats();
+    } else {
+        m_interaction.setPhotoFetcher({});
     }
+
+    if (type == BackendConfig::Type::Http)
+        fetchServerStats();
+    else
+        m_hasServerStats = false;
 
     startFullLoad();
 }

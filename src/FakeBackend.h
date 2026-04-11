@@ -9,8 +9,9 @@
 /// Useful for testing rendering and performance before real backend is ready
 class FakeBackend : public Backend {
 public:
-    FakeBackend(int num_points = 1000)
+    FakeBackend(int num_points = 1000, int delay_ms = 50)
         : m_numPoints(num_points)
+        , m_delayMs(delay_ms)
         , m_rng(std::random_device{}())
     {}
 
@@ -19,8 +20,8 @@ public:
         const SpatialExtent& space,
         std::function<void(std::vector<Entity>&&)> callback
     ) override {
-        // Simulate network latency
-        std::this_thread::sleep_for(std::chrono::milliseconds(50 + (m_rng() % 100)));
+        if (m_delayMs > 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_delayMs + (m_rng() % (m_delayMs * 2))));
 
         std::vector<Entity> entities;
         entities.reserve(m_numPoints);
@@ -46,5 +47,6 @@ public:
 
 private:
     int m_numPoints;
+    int m_delayMs;
     std::mt19937 m_rng;
 };

@@ -22,42 +22,29 @@ public:
         std::function<void(std::vector<Entity>&&)> callback
     ) override;
 
-    /// Stream all entities from GET /v1/query/export, calling on_total once with
-    /// the count from the first NDJSON line, then batch_callback for each chunk.
-    /// Blocks until the stream ends or cancelFetch() is called.
     void streamAllEntities(
         std::function<void(size_t total)> on_total,
         std::function<void(std::vector<Entity>&&)> batch_callback
-    );
+    ) override;
 
-    /// Fetch all entities of this type via /v1/query/time with the given time range.
-    /// Calls batch_callback once with all results (up to 100k). For photos and other
-    /// type-filtered datasets that don't have a streaming export endpoint.
     void streamAllByType(
         double startTime,
         double endTime,
         std::function<void(std::vector<Entity>&&)> batch_callback
-    );
+    ) override;
 
-    /// Cancel an in-progress fetchAllEntities loop
-    void cancelFetch() { m_cancelled.store(true); }
+    void cancelFetch() override { m_cancelled.store(true); }
 
-    /// Fetch thumbnail image bytes for a photo entity. Blocking; call from a thread.
-    std::vector<uint8_t> fetchPhotoThumb(const std::string& entityId) {
+    std::vector<uint8_t> fetchPhotoThumb(const std::string& entityId) override {
         return m_api->fetch_photo_thumb(entityId);
     }
 
+    ServerStats fetchStats() override { return m_api->fetch_stats(); }
+
+    const std::string& entityType() const override { return m_entityType; }
+
     /// The configured API key (for building URLs externally if needed).
     const std::string& apiKey() const { return m_api->apiKey(); }
-
-    /// Fetch server statistics from /stats endpoint
-    ServerStats fetchStats() { return m_api->fetch_stats(); }
-
-    /// Set the entity type to fetch (e.g., "location.gps", "photo")
-    void setEntityType(const std::string& type) { m_entityType = type; }
-
-    /// Get the current entity type
-    const std::string& entityType() const { return m_entityType; }
 
 private:
     std::unique_ptr<BackendAPI> m_api;

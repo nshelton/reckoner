@@ -71,6 +71,7 @@ add_library(reckoner_http STATIC
   src/http/HttpClient.cpp
   src/http/BackendAPI.cpp
   src/HttpBackend.cpp
+  src/BackendFactory.cpp
 )
 target_include_directories(reckoner_http PUBLIC src)
 target_link_libraries(reckoner_http PUBLIC

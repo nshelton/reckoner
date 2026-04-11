@@ -8,9 +8,7 @@
 #include "TimelineCamera.h"
 #include "TimelineRenderer.h"
 #include "AppModel.h"
-#include "Backend.h"
-#include "FakeBackend.h"
-#include "HttpBackend.h"
+#include "BackendFactory.h"
 #include <memory>
 #include <future>
 #include <string>
@@ -44,12 +42,9 @@ private:
     TimelineRenderer m_timelineRenderer{};
     AppModel* m_model{nullptr};
 
-    // Backends — one per layer
-    // layers[0] = GPS, layers[1] = Photos, layers[2] = Calendar, layers[3] = Google Timeline
-    std::unique_ptr<Backend> m_backend;                // GPS
-    std::unique_ptr<Backend> m_photoBackend;           // Photos
-    std::unique_ptr<Backend> m_calendarBackend;        // Calendar
-    std::unique_ptr<Backend> m_googleTimelineBackend;  // Google Timeline
+    // Backends — one per layer via BackendFactory
+    BackendConfig m_backendConfig{BackendConfig::Type::Http};
+    BackendSet m_backends;
     std::future<void> m_pendingGpsFetch;
     std::future<void> m_pendingPhotoFetch;
     std::future<void> m_pendingCalendarFetch;
@@ -63,9 +58,7 @@ private:
     std::mutex m_batchMutex;
     std::deque<PendingBatch> m_completedBatches;
 
-    // Backend configuration
-    enum class BackendType { Fake, Http };
-    BackendType m_backendType = BackendType::Http;
+    // Backend URL buffer for ImGui input
     char m_backendUrl[256] = "http://n3k0.local:8000";
 
     // Cached window sizes
@@ -94,5 +87,6 @@ private:
     void startFullLoad();
     void drainCompletedBatches();
     void fetchServerStats();
-    void switchBackend(BackendType type);
+    void cancelAndWaitAll();
+    void switchBackend(BackendConfig::Type type);
 };
