@@ -72,6 +72,7 @@ add_library(reckoner_http STATIC
   src/http/BackendAPI.cpp
   src/HttpBackend.cpp
   src/BackendFactory.cpp
+  src/FetchOrchestrator.cpp
 )
 target_include_directories(reckoner_http PUBLIC src)
 target_link_libraries(reckoner_http PUBLIC
@@ -103,6 +104,7 @@ add_executable(reckoner
   src/tiles/RasterTileRenderer.cpp
   src/tiles/RasterTileCache.cpp
   src/tiles/MvtDecoder.cpp
+  src/gui/ControlsPanel.cpp
 )
 
 target_include_directories(reckoner PRIVATE

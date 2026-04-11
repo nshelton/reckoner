@@ -19,6 +19,8 @@ add_executable(reckoner_tests
   test_entity_picker.cpp
   test_fake_backend.cpp
   test_backend_factory.cpp
+  test_fetch_orchestrator.cpp
+  test_fps_tracker.cpp
 )
 
 target_link_libraries(reckoner_tests PRIVATE

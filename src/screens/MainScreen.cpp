@@ -3,10 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cmath>
-#include <future>
 #include <chrono>
 
-// Timing helper — prints to stderr if elapsed > threshold_ms
 namespace {
     using Clock = std::chrono::steady_clock;
     using TP    = Clock::time_point;
@@ -56,21 +54,17 @@ void MainScreen::onUpdate(double dt)
                   << "\n";
     }
 
-    // FPS tracking
-    m_frameTimeAccum += dt;
-    m_frameCount++;
-    if (m_frameTimeAccum >= 0.5)
-    {
-        m_fps = m_frameCount / m_frameTimeAccum;
-        m_frameMs = (m_frameTimeAccum / m_frameCount) * 1000.0;
-        m_frameCount = 0;
-        m_frameTimeAccum = 0.0;
-    }
+    m_fpsTracker.tick(dt);
 
     auto t_update = Clock::now();
 
     { auto t = Clock::now(); updateSpatialExtent();              log_slow("updateSpatialExtent", t); }
-    { auto t = Clock::now(); drainCompletedBatches();            log_slow("drainCompletedBatches", t); }
+    {
+        auto t = Clock::now();
+        if (m_fetchOrchestrator.drainCompletedBatches(*m_model))
+            m_interaction.markPickersDirty();
+        log_slow("drainCompletedBatches", t);
+    }
     { auto t = Clock::now(); m_interaction.update(*m_model);     log_slow("interaction.update", t, 5); }
     { auto t = Clock::now(); m_interaction.drainPhotoTexture();  log_slow("drainPhotoTexture", t, 5); }
 
@@ -84,7 +78,7 @@ void MainScreen::onRender()
 
 void MainScreen::onDetach()
 {
-    cancelAndWaitAll();
+    m_fetchOrchestrator.cancelAndWaitAll();
     m_interaction.shutdown();  // waits for thumbnail fetch, deletes GL texture
 
     m_renderer.shutdown();
@@ -219,151 +213,15 @@ void MainScreen::onGui()
     ImGui::End();
 
     // --- Controls Window ---
-    ImGui::Begin("Controls");
-    {
-        ImGui::Text("%.1f FPS  (%.2f ms)", m_fps, m_frameMs);
-
-        ImGui::Separator();
-        if (ImGui::Button("Reset Map")) m_camera.reset();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset Timeline")) m_timelineCamera.reset();
-
-        ImGui::Separator();
-        ImGui::Text("Backend Configuration:");
-
-        const char *backend_types[] = {"Fake Data", "HTTP Backend"};
-        int current_type = static_cast<int>(m_backendConfig.type);
-        if (ImGui::Combo("Backend Type", &current_type, backend_types, 2))
-            switchBackend(static_cast<BackendConfig::Type>(current_type));
-
-        if (m_backendConfig.type == BackendConfig::Type::Http)
-        {
-            ImGui::InputText("Backend URL", m_backendUrl, sizeof(m_backendUrl));
-            if (ImGui::Button("Apply HTTP Config"))
-                switchBackend(BackendConfig::Type::Http);
-        }
-
-        ImGui::Separator();
-        ImGui::Text("View Extent:");
-        ImGui::Text("Lon: %.6f to %.6f",
-            m_model->spatial_extent.min_lon, m_model->spatial_extent.max_lon);
-        ImGui::Text("Lat: %.6f to %.6f",
-            m_model->spatial_extent.min_lat, m_model->spatial_extent.max_lat);
-
-        ImGui::Separator();
-        ImGui::Text("Server Stats:");
-        if (m_hasServerStats)
-        {
-            ImGui::Text("Total entities: %d", m_serverStats.total_entities);
-            for (const auto& [type, count] : m_serverStats.entities_by_type)
-                ImGui::Text("  %s: %d", type.c_str(), count);
-            if (!m_serverStats.oldest_time.empty()) {
-                ImGui::Text("Coverage: %s", m_serverStats.oldest_time.substr(0, 10).c_str());
-                ImGui::Text("      to: %s", m_serverStats.newest_time.substr(0, 10).c_str());
-            }
-            ImGui::Text("DB size: %.1f MB", m_serverStats.db_size_mb);
-        }
-        else
-        {
-            ImGui::TextDisabled("No stats available");
-        }
-
-        // Per-layer status + visibility toggles
-        ImGui::Separator();
-        ImGui::Text("Layers:");
-        for (auto& layer : m_model->layers) {
-            ImGui::PushID(layer.name.c_str());
-            bool vis = layer.visible;
-            if (ImGui::Checkbox("##vis", &vis))
-                layer.visible = vis;
-            ImGui::SameLine();
-            ImVec4 col(layer.color.r, layer.color.g, layer.color.b, 1.0f);
-            ImGui::ColorButton("##col", col,
-                ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder,
-                ImVec2(14, 14));
-            ImGui::SameLine();
-            size_t count = layer.entities.size();
-            if (layer.is_fetching)
-                ImGui::Text("%s: %zu (loading...)", layer.name.c_str(), count);
-            else
-                ImGui::Text("%s: %zu", layer.name.c_str(), count);
-            ImGui::SetNextItemWidth(-1);
-            ImGui::SliderFloat("##alpha", &layer.color.a, 0.0f, 1.0f, "alpha %.3f");
-            ImGui::PopID();
-        }
-
-        // GPS progress bar
-        {
-            const auto& gpsLayer = m_model->layers[0];
-            size_t loaded = gpsLayer.entities.size();
-            size_t total  = m_model->total_expected.load();
-            if (gpsLayer.is_fetching) {
-                if (total > 0) {
-                    float progress = static_cast<float>(loaded) / static_cast<float>(total);
-                    ImGui::ProgressBar(progress, ImVec2(-1, 0));
-                } else {
-                    ImGui::ProgressBar(-1.0f, ImVec2(-1, 0));
-                }
-            } else if (m_model->initial_load_complete.load()) {
-                ImGui::Text("Loaded: %zu GPS  /  %zu photos  /  %zu calendar",
-                    m_model->layers[0].entities.size(),
-                    m_model->layers[1].entities.size(),
-                    m_model->layers[2].entities.size());
-            }
-        }
-
-        ImGui::Text("Points rendered: %d", m_renderer.totalPoints());
-
-        if (m_model->fetch_latencies.count() > 0)
-        {
-            ImGui::Separator();
-            ImGui::Text("Fetch Latency (ms):");
-            ImGui::Text("  Avg: %.1f", m_model->fetch_latencies.average());
-            ImGui::Text("  Min: %.1f", m_model->fetch_latencies.min());
-            ImGui::Text("  Max: %.1f", m_model->fetch_latencies.max());
-            ImGui::Text("  Samples: %zu", m_model->fetch_latencies.count());
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Timeline Overlays:");
-        bool histogramEnabled = m_timelineRenderer.histogramEnabled();
-        if (ImGui::Checkbox("Histogram", &histogramEnabled))
-            m_timelineRenderer.setHistogramEnabled(histogramEnabled);
-        bool solarAltEnabled = m_timelineRenderer.solarAltitudeEnabled();
-        if (ImGui::Checkbox("Solar Altitude", &solarAltEnabled))
-            m_timelineRenderer.setSolarAltitudeEnabled(solarAltEnabled);
-        bool moonAltEnabled = m_timelineRenderer.moonAltitudeEnabled();
-        if (ImGui::Checkbox("Moon Altitude", &moonAltEnabled))
-            m_timelineRenderer.setMoonAltitudeEnabled(moonAltEnabled);
-
-        ImGui::Separator();
-        ImGui::Text("Rendering:");
-
-        static const char* kTileModeLabels[] = {
-            "None",
-            "Vector (Versatiles)",
-            "OSM Standard (labeled)",
-            "CartoDB Positron (labeled)",
-            "CartoDB Dark Matter (labeled)",
-        };
-        int tileMode = static_cast<int>(m_renderer.tileMode());
-        if (ImGui::Combo("Map Tiles", &tileMode, kTileModeLabels, IM_ARRAYSIZE(kTileModeLabels)))
-            m_renderer.setTileMode(static_cast<TileMode>(tileMode));
-
-        float pointSize = m_renderer.pointSize();
-        if (ImGui::SliderFloat("Point Size", &pointSize, 0.01f, 1.0f, "%.1f"))
-            m_renderer.setPointSize(pointSize);
-
-        ImGui::Separator();
-        if (ImGui::Button("Reload All Data"))
-            startFullLoad();
-
-        ImGui::Separator();
-        ImGui::Text("Map: center (%.4f, %.4f) zoom %.4f",
-                     m_camera.center().x, m_camera.center().y, m_camera.zoom());
-        ImGui::Text("Timeline: zoom %.0fs", m_timelineCamera.zoom());
-    }
-    ImGui::End();
+    ControlsActions actions;
+    m_controlsPanel.draw(
+        m_fpsTracker, *m_model, m_backendConfig,
+        m_backendUrl, sizeof(m_backendUrl),
+        m_serverStats, m_hasServerStats,
+        m_renderer, m_timelineRenderer,
+        m_camera, m_timelineCamera,
+        actions);
+    applyControlsActions(actions);
 
     // --- Entity Details Window ---
     m_interaction.drawDetailsPanel(*m_model);
@@ -456,161 +314,46 @@ void MainScreen::updateSpatialExtent()
     m_model->time_extent = visibleTime;
 }
 
-void MainScreen::drainCompletedBatches()
+void MainScreen::applyControlsActions(const ControlsActions& actions)
 {
-    std::deque<PendingBatch> batches;
-    {
-        std::lock_guard<std::mutex> lock(m_batchMutex);
-        batches.swap(m_completedBatches);
+    if (actions.resetMap) m_camera.reset();
+    if (actions.resetTimeline) m_timelineCamera.reset();
+
+    if (actions.switchBackendType >= 0)
+        switchBackend(static_cast<BackendConfig::Type>(actions.switchBackendType));
+    if (actions.applyHttpConfig)
+        switchBackend(BackendConfig::Type::Http);
+
+    if (actions.tileMode >= 0)
+        m_renderer.setTileMode(static_cast<TileMode>(actions.tileMode));
+    if (actions.pointSize >= 0.0f)
+        m_renderer.setPointSize(actions.pointSize);
+
+    if (actions.histogram >= 0)
+        m_timelineRenderer.setHistogramEnabled(actions.histogram != 0);
+    if (actions.solarAltitude >= 0)
+        m_timelineRenderer.setSolarAltitudeEnabled(actions.solarAltitude != 0);
+    if (actions.moonAltitude >= 0)
+        m_timelineRenderer.setMoonAltitudeEnabled(actions.moonAltitude != 0);
+
+    if (actions.reloadAllData) {
+        m_fetchOrchestrator.cancelAndWaitAll();
+        m_interaction.resetPickers();
+        m_fetchOrchestrator.startFullLoad(*m_model);
     }
-
-    for (auto& pb : batches) {
-        if (pb.layerIndex < 0 || pb.layerIndex >= static_cast<int>(m_model->layers.size())) continue;
-        auto& layerEntities = m_model->layers[pb.layerIndex].entities;
-        layerEntities.reserve(layerEntities.size() + pb.entities.size());
-        for (auto& entity : pb.entities)
-            layerEntities.push_back(std::move(entity));
-    }
-
-    if (!batches.empty())
-        m_interaction.markPickersDirty();
-}
-
-void MainScreen::startFullLoad()
-{
-    std::cerr << "[LOAD] startFullLoad begin\n";
-
-    // Clear all layer data
-    for (auto& layer : m_model->layers) {
-        layer.entities.clear();
-        layer.is_fetching = false;
-    }
-    m_model->initial_load_complete.store(false);
-    m_model->total_expected.store(0);
-
-    m_interaction.resetPickers();
-
-    if (m_backendConfig.type == BackendConfig::Type::Http) {
-        // --- GPS fetch (streaming NDJSON export) ---
-        if (m_backends.gps) {
-            auto* gps = m_backends.gps.get();
-            m_model->layers[0].startFetch();
-            m_pendingGpsFetch = std::async(std::launch::async, [this, gps]() {
-                std::cerr << "[GPS] stream started\n";
-                size_t batchNum = 0;
-                gps->streamAllEntities(
-                    [this](size_t total) {
-                        std::cerr << "[GPS] total expected: " << total << "\n";
-                        m_model->total_expected.store(total);
-                    },
-                    [this, &batchNum](std::vector<Entity>&& batch) {
-                        ++batchNum;
-                        std::cerr << "[GPS] batch " << batchNum
-                                  << " size=" << batch.size() << "\n";
-                        auto t = Clock::now();
-                        std::lock_guard<std::mutex> lock(m_batchMutex);
-                        long lockMs = ms_since(t);
-                        if (lockMs > 5)
-                            std::cerr << "[GPS] waited " << lockMs << "ms for batchMutex\n";
-                        m_completedBatches.push_back({0, std::move(batch)});
-                    });
-                std::cerr << "[GPS] stream complete, " << batchNum << " batches\n";
-                auto end = std::chrono::steady_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    end - m_model->layers[0].last_fetch_start);
-                m_model->fetch_latencies.push(static_cast<float>(duration.count()));
-                m_model->layers[0].endFetch();
-                m_model->initial_load_complete.store(true);
-            });
-        }
-
-        // --- Type-filtered fetches (photo, calendar, google timeline) ---
-        struct TypeFetch {
-            int layerIndex;
-            Backend* backend;
-            std::future<void>* future;
-            const char* tag;
-        };
-        TypeFetch typeFetches[] = {
-            {1, m_backends.photo.get(),          &m_pendingPhotoFetch,           "PHOTO"},
-            {2, m_backends.calendar.get(),       &m_pendingCalendarFetch,        "CALENDAR"},
-            {3, m_backends.googleTimeline.get(),  &m_pendingGoogleTimelineFetch, "GTIMELINE"},
-        };
-
-        for (auto& tf : typeFetches) {
-            if (!tf.backend) continue;
-            int li = tf.layerIndex;
-            Backend* be = tf.backend;
-            const char* tag = tf.tag;
-            m_model->layers[li].startFetch();
-            *tf.future = std::async(std::launch::async, [this, be, li, tag]() {
-                std::cerr << "[" << tag << "] fetch started\n";
-                be->streamAllByType(
-                    0.0, 2000000000.0,
-                    [this, li, tag](std::vector<Entity>&& batch) {
-                        std::cerr << "[" << tag << "] batch size=" << batch.size() << "\n";
-                        auto t = Clock::now();
-                        std::lock_guard<std::mutex> lock(m_batchMutex);
-                        long lockMs = ms_since(t);
-                        if (lockMs > 5)
-                            std::cerr << "[" << tag << "] waited " << lockMs << "ms for batchMutex\n";
-                        m_completedBatches.push_back({li, std::move(batch)});
-                    });
-                std::cerr << "[" << tag << "] fetch complete\n";
-                m_model->layers[li].endFetch();
-            });
-        }
-    } else {
-        // Fake backend — GPS only, photos not available in fake mode
-        m_model->layers[0].startFetch();
-        TimeExtent fullTime = m_model->time_extent;
-        SpatialExtent fullSpace;
-        fullSpace.min_lat = -90.0;
-        fullSpace.max_lat =  90.0;
-        fullSpace.min_lon = -180.0;
-        fullSpace.max_lon =  180.0;
-
-        m_pendingGpsFetch = std::async(std::launch::async, [this, fullTime, fullSpace]() {
-            m_backends.gps->fetchEntities(fullTime, fullSpace,
-                [this](std::vector<Entity>&& batch) {
-                    std::lock_guard<std::mutex> lock(m_batchMutex);
-                    m_completedBatches.push_back({0, std::move(batch)});
-                });
-            m_model->layers[0].endFetch();
-            m_model->initial_load_complete.store(true);
-        });
-    }
-}
-
-void MainScreen::fetchServerStats()
-{
-    m_hasServerStats = false;
-    if (m_backends.gps) {
-        m_serverStats = m_backends.gps->fetchStats();
-        m_hasServerStats = (m_serverStats.total_entities > 0);
-    }
-}
-
-void MainScreen::cancelAndWaitAll()
-{
-    m_backends.cancelAll();
-    if (m_pendingGpsFetch.valid())             m_pendingGpsFetch.wait();
-    if (m_pendingPhotoFetch.valid())           m_pendingPhotoFetch.wait();
-    if (m_pendingCalendarFetch.valid())        m_pendingCalendarFetch.wait();
-    if (m_pendingGoogleTimelineFetch.valid())  m_pendingGoogleTimelineFetch.wait();
 }
 
 void MainScreen::switchBackend(BackendConfig::Type type)
 {
-    cancelAndWaitAll();
-    // Must wait for thumbnail fetch before destroying the backend it holds a pointer to
+    m_fetchOrchestrator.cancelAndWaitAll();
     m_interaction.waitForPhotoFetch();
 
     m_backendConfig.type = type;
-    m_backends = createBackends(m_backendConfig, m_backendUrl);
+    m_fetchOrchestrator.setBackends(createBackends(m_backendConfig, m_backendUrl), type);
 
-    if (m_backends.photo) {
-        Backend* pb = m_backends.photo.get();
+    auto& backends = m_fetchOrchestrator.backends();
+    if (backends.photo) {
+        Backend* pb = backends.photo.get();
         m_interaction.setPhotoFetcher([pb](const std::string& id) -> std::vector<uint8_t> {
             return pb->fetchPhotoThumb(id);
         });
@@ -618,10 +361,14 @@ void MainScreen::switchBackend(BackendConfig::Type type)
         m_interaction.setPhotoFetcher({});
     }
 
-    if (type == BackendConfig::Type::Http)
-        fetchServerStats();
-    else
+    if (type == BackendConfig::Type::Http) {
+        auto [stats, ok] = m_fetchOrchestrator.fetchServerStats();
+        m_serverStats = stats;
+        m_hasServerStats = ok;
+    } else {
         m_hasServerStats = false;
+    }
 
-    startFullLoad();
+    m_interaction.resetPickers();
+    m_fetchOrchestrator.startFullLoad(*m_model);
 }

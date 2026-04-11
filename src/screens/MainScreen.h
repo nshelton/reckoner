@@ -8,12 +8,10 @@
 #include "TimelineCamera.h"
 #include "TimelineRenderer.h"
 #include "AppModel.h"
-#include "BackendFactory.h"
-#include <memory>
-#include <future>
+#include "FetchOrchestrator.h"
+#include "gui/ControlsPanel.h"
+#include "core/FpsTracker.h"
 #include <string>
-#include <mutex>
-#include <deque>
 #include <vector>
 
 class MainScreen : public IScreen
@@ -42,21 +40,9 @@ private:
     TimelineRenderer m_timelineRenderer{};
     AppModel* m_model{nullptr};
 
-    // Backends — one per layer via BackendFactory
+    // Fetch orchestration — owns backends, futures, and batch queue
     BackendConfig m_backendConfig{BackendConfig::Type::Http};
-    BackendSet m_backends;
-    std::future<void> m_pendingGpsFetch;
-    std::future<void> m_pendingPhotoFetch;
-    std::future<void> m_pendingCalendarFetch;
-    std::future<void> m_pendingGoogleTimelineFetch;
-
-    // Thread-safe tagged batch delivery (background thread → main thread)
-    struct PendingBatch {
-        int layerIndex;
-        std::vector<Entity> entities;
-    };
-    std::mutex m_batchMutex;
-    std::deque<PendingBatch> m_completedBatches;
+    FetchOrchestrator m_fetchOrchestrator;
 
     // Backend URL buffer for ImGui input
     char m_backendUrl[256] = "http://n3k0.local:8000";
@@ -72,11 +58,8 @@ private:
     bool m_mapViewportValid{false};
     bool m_timelineViewportValid{false};
 
-    // FPS tracking
-    double m_frameTimeAccum{0.0};
-    int m_frameCount{0};
-    double m_fps{0.0};
-    double m_frameMs{0.0};
+    FpsTracker m_fpsTracker;
+    ControlsPanel m_controlsPanel;
 
     // Server stats
     ServerStats m_serverStats;
@@ -84,9 +67,6 @@ private:
 
     // Methods
     void updateSpatialExtent();
-    void startFullLoad();
-    void drainCompletedBatches();
-    void fetchServerStats();
-    void cancelAndWaitAll();
     void switchBackend(BackendConfig::Type type);
+    void applyControlsActions(const ControlsActions& actions);
 };
