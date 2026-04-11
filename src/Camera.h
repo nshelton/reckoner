@@ -1,7 +1,5 @@
 #pragma once
 
-#define GL_SILENCE_DEPRECATION
-#include <GLFW/glfw3.h>
 #include "core/Vec2.h"
 #include "core/Mat3.h"
 #include <algorithm>

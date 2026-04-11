@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(BUILD_TESTS "Build test suite" ON)
+
 # Fetch nlohmann_json for JSON parsing
 include(FetchContent)
 FetchContent_Declare(json
@@ -47,14 +49,59 @@ if(NOT DEFINED SHADER_BASE_DIR)
   set(SHADER_BASE_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
 endif()
 
-# Collect all sources, excluding the old hot-reload plumbing
-file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS src/*.cpp)
-list(REMOVE_ITEM ALL_SRCS
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HotLoader.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/PluginMain.cpp
+# ---------------------------------------------------------------------------
+# reckoner_core — pure C++17 logic, zero GL/GLFW/ImGui/curl dependencies
+# ---------------------------------------------------------------------------
+add_library(reckoner_core STATIC
+  src/core/EnvLoader.cpp
+  src/core/SolarCalculations.cpp
+  src/core/TimeUtils.cpp
+  src/Camera.cpp
+  src/TimelineCamera.cpp
+  src/EntityPicker.cpp
+)
+target_include_directories(reckoner_core PUBLIC src)
+target_link_libraries(reckoner_core PUBLIC nlohmann_json::nlohmann_json)
+
+# ---------------------------------------------------------------------------
+# reckoner_http — HTTP/backend code (curl + json)
+# ---------------------------------------------------------------------------
+add_library(reckoner_http STATIC
+  src/http/HttpClient.cpp
+  src/http/BackendAPI.cpp
+  src/HttpBackend.cpp
+)
+target_include_directories(reckoner_http PUBLIC src)
+target_link_libraries(reckoner_http PUBLIC
+  reckoner_core
+  CURL::libcurl
+  nlohmann_json::nlohmann_json
 )
 
-add_executable(reckoner ${ALL_SRCS})
+# ---------------------------------------------------------------------------
+# reckoner executable — GL/ImGui sources (explicit list, no GLOB_RECURSE)
+# ---------------------------------------------------------------------------
+add_executable(reckoner
+  src/main.cpp
+  src/app/App.cpp
+  src/screens/MainScreen.cpp
+  src/Interaction.cpp
+  src/Renderer.cpp
+  src/TimelineRenderer.cpp
+  src/renderer/CalendarRenderer.cpp
+  src/renderer/HistogramRenderer.cpp
+  src/renderer/LineRenderer.cpp
+  src/renderer/MoonAltitudeRenderer.cpp
+  src/renderer/PointRenderer.cpp
+  src/renderer/Shader.cpp
+  src/renderer/SolarAltitudeRenderer.cpp
+  src/renderer/TextRenderer.cpp
+  src/tiles/TileRenderer.cpp
+  src/tiles/TileCache.cpp
+  src/tiles/RasterTileRenderer.cpp
+  src/tiles/RasterTileCache.cpp
+  src/tiles/MvtDecoder.cpp
+)
 
 target_include_directories(reckoner PRIVATE
     src
@@ -66,9 +113,18 @@ target_compile_definitions(reckoner PRIVATE
     SHADER_BASE_DIR="${SHADER_BASE_DIR}"
 )
 target_link_libraries(reckoner PRIVATE
+    reckoner_core
+    reckoner_http
     imgui
     glfw
     OpenGL::GL
     CURL::libcurl
     nlohmann_json::nlohmann_json
 )
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+if(BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
