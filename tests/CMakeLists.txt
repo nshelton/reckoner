@@ -15,6 +15,8 @@ add_executable(reckoner_tests
   test_tile_math.cpp
   test_camera.cpp
   test_timeline_camera.cpp
+  test_picking_logic.cpp
+  test_entity_picker.cpp
 )
 
 target_link_libraries(reckoner_tests PRIVATE

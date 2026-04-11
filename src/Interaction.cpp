@@ -1,5 +1,6 @@
 #include "Interaction.h"
 #include "AppModel.h"
+#include "core/PickingLogic.h"
 #include <imgui.h>
 #include <ctime>
 #include <cmath>
@@ -287,53 +288,6 @@ void InteractionController::drainPhotoTexture()
     m_photoTexture.texH    = h;
 }
 
-// ---- Formatting helpers ----
-
-namespace {
-
-static std::string fmtTimestamp(double t, bool includeSeconds = true)
-{
-    std::time_t tt = static_cast<std::time_t>(t);
-    if (std::tm* tm = std::gmtime(&tt)) {
-        char buf[64];
-        std::strftime(buf, sizeof(buf),
-            includeSeconds ? "%Y-%m-%d  %H:%M:%S UTC"
-                           : "%Y-%m-%d  %H:%M UTC",
-            tm);
-        return buf;
-    }
-    return "(invalid)";
-}
-
-static std::string fmtDuration(double seconds)
-{
-    if (seconds <= 0.0) return "instant";
-    long s = static_cast<long>(seconds);
-    if (s < 60)          return std::to_string(s) + "s";
-    long m = s / 60; s %= 60;
-    if (m < 60)          return std::to_string(m) + "m " + std::to_string(s) + "s";
-    long h = m / 60; m %= 60;
-    if (h < 24)          return std::to_string(h) + "h " + std::to_string(m) + "m";
-    long d = h / 24; h %= 24;
-    return std::to_string(d) + "d " + std::to_string(h) + "h";
-}
-
-static std::string fmtLat(double lat)
-{
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.6f° %c", std::abs(lat), lat >= 0.0 ? 'N' : 'S');
-    return buf;
-}
-
-static std::string fmtLon(double lon)
-{
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%.6f° %c", std::abs(lon), lon >= 0.0 ? 'E' : 'W');
-    return buf;
-}
-
-} // namespace
-
 // ---- ImGui rendering ----
 
 void InteractionController::drawEntityTooltip(PickResult pick, const AppModel& model) const
@@ -425,7 +379,7 @@ void InteractionController::drawDetailsPanel(const AppModel& model)
         if (e.is_instant()) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("When");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtTimestamp(e.time_start).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtTimestamp(e.time_start).c_str());
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -433,15 +387,15 @@ void InteractionController::drawDetailsPanel(const AppModel& model)
         } else {
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("Start");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtTimestamp(e.time_start).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtTimestamp(e.time_start).c_str());
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("End");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtTimestamp(e.time_end).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtTimestamp(e.time_end).c_str());
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("Duration");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtDuration(e.duration()).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtDuration(e.duration()).c_str());
         }
 
         ImGui::EndTable();
@@ -458,11 +412,11 @@ void InteractionController::drawDetailsPanel(const AppModel& model)
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("Lat");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtLat(*e.lat).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtLat(*e.lat).c_str());
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextDisabled("Lon");
-            ImGui::TableNextColumn(); ImGui::Text("%s", fmtLon(*e.lon).c_str());
+            ImGui::TableNextColumn(); ImGui::Text("%s", PickingLogic::fmtLon(*e.lon).c_str());
 
             ImGui::EndTable();
         }

@@ -54,6 +54,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(reckoner_core STATIC
   src/core/EnvLoader.cpp
+  src/core/PickingLogic.cpp
   src/core/SolarCalculations.cpp
   src/core/TimeUtils.cpp
   src/Camera.cpp

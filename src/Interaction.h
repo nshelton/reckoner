@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Vec2.h"
+#include "core/PickingLogic.h"
 #include "Camera.h"
 #include "TimelineCamera.h"
 #include "EntityPicker.h"
@@ -13,15 +14,6 @@
 #include <functional>
 
 class AppModel;
-
-/// Identifies a specific entity within a specific layer; invalid if layerIndex < 0.
-struct PickResult {
-    int layerIndex{-1};
-    int entityIndex{-1};
-    bool valid() const { return layerIndex >= 0 && entityIndex >= 0; }
-    bool operator==(const PickResult& o) const { return layerIndex == o.layerIndex && entityIndex == o.entityIndex; }
-    bool operator!=(const PickResult& o) const { return !(*this == o); }
-};
 
 /// Public state of the interaction system (passed to renderers for visual feedback)
 struct InteractionState {
